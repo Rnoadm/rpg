@@ -1,0 +1,52 @@
+package rpg
+
+import (
+	"sort"
+)
+
+type ObjectIndex uint64
+
+type sortedObjectIndices []ObjectIndex
+
+func (o sortedObjectIndices) Len() int           { return len(o) }
+func (o sortedObjectIndices) Less(i, j int) bool { return o[i] < o[j] }
+func (o sortedObjectIndices) Swap(i, j int)      { o[i], o[j] = o[j], o[i] }
+func (o *sortedObjectIndices) add(id ObjectIndex) bool {
+	i := sort.Search(len(*o), func(i int) bool {
+		return (*o)[i] >= id
+	})
+
+	if i < len(*o) && (*o)[i] == id {
+		return false
+	}
+
+	*o = append((*o)[:i], append(sortedObjectIndices{id}, (*o)[i:]...)...)
+	return true
+}
+func (o *sortedObjectIndices) remove(id ObjectIndex) bool {
+	i := sort.Search(len(*o), func(i int) bool {
+		return (*o)[i] >= id
+	})
+
+	if i < len(*o) && (*o)[i] == id {
+		*o = append((*o)[:i], (*o)[i+1:]...)
+		return true
+	}
+	return false
+}
+
+var nextObjectID = make(chan ObjectIndex)
+var nextObjectVersion = make(chan uint64)
+
+func init() {
+	go func() {
+		for i := ObjectIndex(1); ; i++ {
+			nextObjectID <- i
+		}
+	}()
+	go func() {
+		for i := uint64(0); ; i++ {
+			nextObjectVersion <- i
+		}
+	}()
+}
