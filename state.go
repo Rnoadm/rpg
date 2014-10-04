@@ -1,6 +1,9 @@
 package rpg
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
 
 type ObjectFactory func(Object) Object
 
@@ -36,7 +39,7 @@ retry:
 			if p, ok := s.objects[id]; ok && p.base().version != o.base().version {
 				continue retry
 			}
-			o.base().version = <-nextObjectVersion
+			o.base().version = atomic.AddUint64(&nextObjectVersion, 1)
 			s.objects[id] = o
 		}
 		return true
@@ -44,10 +47,10 @@ retry:
 }
 
 func (s *State) Create(f ObjectFactory) (id ObjectIndex, o Object) {
-	id = <-nextObjectID
+	id = ObjectIndex(atomic.AddUint64(&nextObjectID, 1))
 	o = f(&BaseObject{
 		id:       id,
-		version:  <-nextObjectVersion,
+		version:  atomic.AddUint64(&nextObjectVersion, 1),
 		modified: true,
 	})
 

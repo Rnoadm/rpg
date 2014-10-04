@@ -35,18 +35,5 @@ func (o *sortedObjectIndices) remove(id ObjectIndex) bool {
 	return false
 }
 
-var nextObjectID = make(chan ObjectIndex)
-var nextObjectVersion = make(chan uint64)
-
-func init() {
-	go func() {
-		for i := ObjectIndex(1); ; i++ {
-			nextObjectID <- i
-		}
-	}()
-	go func() {
-		for i := uint64(0); ; i++ {
-			nextObjectVersion <- i
-		}
-	}()
-}
+var nextObjectID uint64 = 1
+var nextObjectVersion uint64 = 0
