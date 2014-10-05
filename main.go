@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 	"github.com/Rnoadm/rpg"
-	"reflect"
 )
 
 type Name string
@@ -14,7 +13,7 @@ func NameFactory(name string) rpg.ComponentFactory {
 	return Name(name).Clone
 }
 
-var NameType = reflect.TypeOf(Name(""))
+var NameType = rpg.RegisterComponent(NameFactory(""))
 
 func (n Name) Clone(*rpg.Object) rpg.Component {
 	return n

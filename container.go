@@ -1,7 +1,5 @@
 package rpg
 
-import "reflect"
-
 type Container struct {
 	c sortedObjectIndices
 	o *Object
@@ -11,7 +9,7 @@ func ContainerFactory(o *Object) Component {
 	return &Container{o: o}
 }
 
-var ContainerType = reflect.TypeOf((*Container)(nil))
+var ContainerType = RegisterComponent(ContainerFactory)
 
 func (c *Container) Clone(o *Object) Component {
 	clone := &Container{

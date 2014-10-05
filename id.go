@@ -32,3 +32,12 @@ func (o *sortedObjectIndices) remove(id ObjectIndex) bool {
 	}
 	return false
 }
+func (o *sortedObjectIndices) Push(v interface{}) {
+	*o = append(*o, v.(ObjectIndex))
+}
+func (o *sortedObjectIndices) Pop() interface{} {
+	l := len(*o) - 1
+	v := (*o)[l]
+	*o = (*o)[:l]
+	return v
+}

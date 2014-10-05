@@ -1,11 +1,38 @@
 package rpg
 
-import "reflect"
+import (
+	"fmt"
+	"reflect"
+)
 
 type ComponentFactory func(*Object) Component
 
 type Component interface {
 	Clone(*Object) Component
+}
+
+var (
+	registeredComponents = make(map[string]ComponentFactory)
+)
+
+func RegisterComponent(f ComponentFactory) reflect.Type {
+	c := f(nil)
+	t := reflect.TypeOf(c)
+	registeredComponents[typeName(t)] = f
+	return t
+}
+
+func typeName(t reflect.Type) string {
+	// copied with modifications from encoding/gob
+	star := ""
+	if t.Name() == "" && t.Kind() == reflect.Ptr {
+		star = "*"
+		t = t.Elem()
+	}
+	if t.Name() == "" {
+		return t.String()
+	}
+	return fmt.Sprintf("%s%q.%s", star, t.PkgPath(), t.Name())
 }
 
 type Object struct {

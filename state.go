@@ -24,7 +24,7 @@ func newState(parent *State) *State {
 		objects: make(map[ObjectIndex]*Object),
 	}
 	if parent == nil {
-		a := [2]uint64{1, 0}
+		var a [2]uint64
 		s.nextObjectID, s.nextObjectVersion = &a[0], &a[1]
 	} else {
 		s.nextObjectID, s.nextObjectVersion = parent.nextObjectID, parent.nextObjectVersion
@@ -79,8 +79,11 @@ func (s *State) Create(factories ...ComponentFactory) (id ObjectIndex, o *Object
 	for _, f := range factories {
 		c := f(o)
 		t := reflect.TypeOf(c)
+		if _, ok := registeredComponents[typeName(t)]; !ok {
+			panic("rpg: unregistered component type " + t.String())
+		}
 		if _, ok := o.components[t]; ok {
-			panic("rpg: multiple components of type " + t.Name())
+			panic("rpg: multiple components of type " + t.String())
 		}
 		o.components[t] = c
 	}
