@@ -1,57 +1,40 @@
 package rpg
 
-type Object interface {
-	ID() ObjectIndex
+import "reflect"
 
-	Add(Object) bool
-	Remove(Object) bool
-	Contents() []ObjectIndex
+type ComponentFactory func(*Object) Component
 
-	Clone() Object
-
-	base() *BaseObject
+type Component interface {
+	Clone(*Object) Component
 }
 
-type BaseObject struct {
-	id       ObjectIndex
-	contents sortedObjectIndices
-	version  uint64
-	modified bool
+type Object struct {
+	id         ObjectIndex
+	components map[reflect.Type]Component
+	version    uint64
+	modified   bool
+	state      *State
 }
 
-func (o *BaseObject) ID() ObjectIndex   { return o.id }
-func (o *BaseObject) base() *BaseObject { return o }
+func (o *Object) ID() ObjectIndex                    { return o.id }
+func (o *Object) State() *State                      { return o.state }
+func (o *Object) Component(t reflect.Type) Component { return o.components[t] }
 
-func (o *BaseObject) Clone() Object {
-	c := &BaseObject{
-		id:       o.id,
-		contents: make(sortedObjectIndices, len(o.contents)),
-		version:  o.version,
-		modified: false,
+func (o *Object) Clone(s *State) *Object {
+	clone := &Object{
+		id:         o.id,
+		components: make(map[reflect.Type]Component, len(o.components)),
+		version:    o.version,
+		modified:   false,
+		state:      s,
 	}
-	copy(c.contents, o.contents)
-
-	return c
-}
-
-func (o *BaseObject) Add(v Object) bool {
-	if o.contents.add(v.base().id) {
-		o.modified = true
-		return true
+	for t, c := range o.components {
+		clone.components[t] = c.Clone(clone)
 	}
-	return false
+
+	return clone
 }
 
-func (o *BaseObject) Remove(v Object) bool {
-	if o.contents.remove(v.base().id) {
-		o.modified = true
-		return true
-	}
-	return false
-}
-
-func (o *BaseObject) Contents() []ObjectIndex {
-	c := make([]ObjectIndex, len(o.contents))
-	copy(c, []ObjectIndex(o.contents))
-	return c
+func (o *Object) Modified() {
+	o.modified = true
 }

@@ -1,8 +1,6 @@
 package rpg
 
-import (
-	"sort"
-)
+import "sort"
 
 type ObjectIndex uint64
 

@@ -1,15 +1,14 @@
 package rpg
 
 import (
+	"reflect"
 	"sync"
 	"sync/atomic"
 )
 
-type ObjectFactory func(Object) Object
-
 type State struct {
 	parent  *State
-	objects map[ObjectIndex]Object
+	objects map[ObjectIndex]*Object
 	mtx     sync.Mutex
 
 	nextObjectID, nextObjectVersion *uint64
@@ -22,7 +21,7 @@ func NewState() *State {
 func newState(parent *State) *State {
 	s := &State{
 		parent:  parent,
-		objects: make(map[ObjectIndex]Object),
+		objects: make(map[ObjectIndex]*Object),
 	}
 	if parent == nil {
 		a := [2]uint64{1, 0}
@@ -48,32 +47,43 @@ retry:
 		defer s.mtx.Unlock()
 
 		for id, o := range child.objects {
-			if !o.base().modified {
+			if !o.modified {
 				continue
 			}
-			if p, ok := s.objects[id]; ok && p.base().version != o.base().version {
+			if p, ok := s.objects[id]; ok && p.version != o.version {
 				continue retry
 			}
 		}
 
 		for id, o := range child.objects {
-			if !o.base().modified {
+			if !o.modified {
 				continue
 			}
-			o.base().version = atomic.AddUint64(s.nextObjectVersion, 1)
+			o.version = atomic.AddUint64(s.nextObjectVersion, 1)
 			s.objects[id] = o
 		}
 		return true
 	}
 }
 
-func (s *State) Create(f ObjectFactory) (id ObjectIndex, o Object) {
+func (s *State) Create(factories ...ComponentFactory) (id ObjectIndex, o *Object) {
 	id = ObjectIndex(atomic.AddUint64(s.nextObjectID, 1))
-	o = f(&BaseObject{
-		id:       id,
-		version:  atomic.AddUint64(s.nextObjectVersion, 1),
-		modified: true,
-	})
+	o = &Object{
+		id:         id,
+		components: make(map[reflect.Type]Component, len(factories)),
+		version:    atomic.AddUint64(s.nextObjectVersion, 1),
+		modified:   true,
+		state:      s,
+	}
+
+	for _, f := range factories {
+		c := f(o)
+		t := reflect.TypeOf(c)
+		if _, ok := o.components[t]; ok {
+			panic("rpg: multiple components of type " + t.Name())
+		}
+		o.components[t] = c
+	}
 
 	s.mtx.Lock()
 	s.objects[id] = o
@@ -82,7 +92,7 @@ func (s *State) Create(f ObjectFactory) (id ObjectIndex, o Object) {
 	return
 }
 
-func (s *State) Get(id ObjectIndex) Object {
+func (s *State) Get(id ObjectIndex) *Object {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -90,7 +100,7 @@ func (s *State) Get(id ObjectIndex) Object {
 		return o
 	}
 
-	o := s.parent.Get(id).Clone()
+	o := s.parent.Get(id).Clone(s)
 	s.objects[id] = o
 
 	return o

@@ -5,50 +5,19 @@ package main
 import (
 	"fmt"
 	"github.com/Rnoadm/rpg"
+	"reflect"
 )
 
-type Person struct {
-	rpg.Object
+type Name string
 
-	name string
+func NameFactory(name string) rpg.ComponentFactory {
+	return Name(name).Clone
 }
 
-func PersonFactory(base rpg.Object) rpg.Object {
-	return &Person{Object: base}
-}
+var NameType = reflect.TypeOf(Name(""))
 
-func (p *Person) String() string {
-	return p.name
-}
-
-func (p *Person) Clone() rpg.Object {
-	return &Person{
-		Object: p.Object.Clone(),
-
-		name: p.name,
-	}
-}
-
-type Item struct {
-	rpg.Object
-
-	name string
-}
-
-func ItemFactory(base rpg.Object) rpg.Object {
-	return &Item{Object: base}
-}
-
-func (i *Item) String() string {
-	return i.name
-}
-
-func (i *Item) Clone() rpg.Object {
-	return &Item{
-		Object: i.Object.Clone(),
-
-		name: i.name,
-	}
+func (n Name) Clone(*rpg.Object) rpg.Component {
+	return n
 }
 
 func main() {
@@ -56,21 +25,16 @@ func main() {
 
 	var personA, personB, itemA, itemB rpg.ObjectIndex
 	if !global.Atomic(func(s *rpg.State) bool {
-		var pa, pb, ia, ib rpg.Object
-		personA, pa = s.Create(PersonFactory)
-		personB, pb = s.Create(PersonFactory)
-		itemA, ia = s.Create(ItemFactory)
-		itemB, ib = s.Create(ItemFactory)
+		var pa, pb, ia, ib *rpg.Object
+		personA, pa = s.Create(NameFactory("person A"), rpg.ContainerFactory)
+		personB, pb = s.Create(NameFactory("person B"), rpg.ContainerFactory)
+		itemA, ia = s.Create(NameFactory("item A"))
+		itemB, ib = s.Create(NameFactory("item B"))
 
-		pa.(*Person).name = "Person A"
-		pb.(*Person).name = "Person B"
-		ia.(*Item).name = "Item A"
-		ib.(*Item).name = "Item B"
-
-		if !pa.Add(ia) {
+		if !pa.Component(rpg.ContainerType).(*rpg.Container).Add(ia) {
 			panic("unreachable")
 		}
-		if !pb.Add(ib) {
+		if !pb.Component(rpg.ContainerType).(*rpg.Container).Add(ib) {
 			panic("unreachable")
 		}
 		return true
@@ -79,39 +43,39 @@ func main() {
 	}
 
 	pa := global.Get(personA)
-	for _, id := range pa.Contents() {
-		fmt.Println(pa, "has", global.Get(id))
+	for _, o := range pa.Component(rpg.ContainerType).(*rpg.Container).Contents() {
+		fmt.Println(pa.Component(NameType), "has", o.Component(NameType))
 	}
 
 	pb := global.Get(personB)
-	for _, id := range pb.Contents() {
-		fmt.Println(pb, "has", global.Get(id))
+	for _, o := range pb.Component(rpg.ContainerType).(*rpg.Container).Contents() {
+		fmt.Println(pb.Component(NameType), "has", o.Component(NameType))
 	}
 
 	fmt.Println("Trade succeeded:", global.Atomic(func(s *rpg.State) bool {
 		pa, pb, ia, ib := s.Get(personA), s.Get(personB), s.Get(itemA), s.Get(itemB)
-		if !pa.Remove(ia) {
+		if !pa.Component(rpg.ContainerType).(*rpg.Container).Remove(ia) {
 			return false
 		}
-		if !pb.Remove(ib) {
+		if !pb.Component(rpg.ContainerType).(*rpg.Container).Remove(ib) {
 			return false
 		}
-		if !pa.Add(ib) {
+		if !pa.Component(rpg.ContainerType).(*rpg.Container).Add(ib) {
 			return false
 		}
-		if !pb.Add(ia) {
+		if !pb.Component(rpg.ContainerType).(*rpg.Container).Add(ia) {
 			return false
 		}
 		return true
 	}))
 
 	pa = global.Get(personA)
-	for _, id := range pa.Contents() {
-		fmt.Println(pa, "has", global.Get(id))
+	for _, o := range pa.Component(rpg.ContainerType).(*rpg.Container).Contents() {
+		fmt.Println(pa.Component(NameType), "has", o.Component(NameType))
 	}
 
 	pb = global.Get(personB)
-	for _, id := range pb.Contents() {
-		fmt.Println(pb, "has", global.Get(id))
+	for _, o := range pb.Component(rpg.ContainerType).(*rpg.Container).Contents() {
+		fmt.Println(pb.Component(NameType), "has", o.Component(NameType))
 	}
 }
