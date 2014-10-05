@@ -39,6 +39,12 @@ retry:
 			if p, ok := s.objects[id]; ok && p.base().version != o.base().version {
 				continue retry
 			}
+		}
+
+		for id, o := range child.objects {
+			if !o.base().modified {
+				continue
+			}
 			o.base().version = atomic.AddUint64(&nextObjectVersion, 1)
 			s.objects[id] = o
 		}
