@@ -11,17 +11,32 @@ type State struct {
 	parent  *State
 	objects map[ObjectIndex]Object
 	mtx     sync.Mutex
+
+	nextObjectID, nextObjectVersion *uint64
 }
 
 func NewState() *State {
-	return &State{objects: make(map[ObjectIndex]Object)}
+	return newState(nil)
+}
+
+func newState(parent *State) *State {
+	s := &State{
+		parent:  parent,
+		objects: make(map[ObjectIndex]Object),
+	}
+	if parent == nil {
+		a := [2]uint64{1, 0}
+		s.nextObjectID, s.nextObjectVersion = &a[0], &a[1]
+	} else {
+		s.nextObjectID, s.nextObjectVersion = parent.nextObjectID, parent.nextObjectVersion
+	}
+	return s
 }
 
 func (s *State) Atomic(f func(*State) bool) bool {
 retry:
 	for {
-		child := NewState()
-		child.parent = s
+		child := newState(s)
 		if !f(child) {
 			return false
 		}
@@ -45,7 +60,7 @@ retry:
 			if !o.base().modified {
 				continue
 			}
-			o.base().version = atomic.AddUint64(&nextObjectVersion, 1)
+			o.base().version = atomic.AddUint64(s.nextObjectVersion, 1)
 			s.objects[id] = o
 		}
 		return true
@@ -53,10 +68,10 @@ retry:
 }
 
 func (s *State) Create(f ObjectFactory) (id ObjectIndex, o Object) {
-	id = ObjectIndex(atomic.AddUint64(&nextObjectID, 1))
+	id = ObjectIndex(atomic.AddUint64(s.nextObjectID, 1))
 	o = f(&BaseObject{
 		id:       id,
-		version:  atomic.AddUint64(&nextObjectVersion, 1),
+		version:  atomic.AddUint64(s.nextObjectVersion, 1),
 		modified: true,
 	})
 

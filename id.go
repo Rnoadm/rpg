@@ -34,6 +34,3 @@ func (o *sortedObjectIndices) remove(id ObjectIndex) bool {
 	}
 	return false
 }
-
-var nextObjectID uint64 = 1
-var nextObjectVersion uint64 = 0
