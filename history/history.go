@@ -156,9 +156,8 @@ func (h *History) seekReverse() error {
 
 func (h *History) Append(s *rpg.State) error {
 	_, err := h.Seek(0, SeekEnd)
-	first := false
 	if err == io.EOF && h.i == -1 {
-		first, err = true, nil
+		err = nil
 	}
 	if err != nil {
 		return err
@@ -172,9 +171,7 @@ func (h *History) Append(s *rpg.State) error {
 
 	patch := bindiff.Diff(h.b, buf.Bytes(), 10)
 
-	if !first {
-		h.i++
-	}
+	h.i++
 	h.b = buf.Bytes()
 
 	err = binary.Write(h.f, binary.LittleEndian, int64(len(patch)))

@@ -135,6 +135,24 @@ func TestSeekLastEmpty(t *testing.T) {
 	expect(t, nil, io.EOF, -1)(h.Seek(0, SeekEnd))
 }
 
+func TestSeekReverseEmpty(t *testing.T) {
+	h, cleanup := testSetup0(t)
+	defer cleanup()
+
+	h.Reset()
+
+	expect(t, nil, io.EOF, -1)(h.Seek(-1, SeekCur))
+}
+
+func TestSeekForwardEmpty(t *testing.T) {
+	h, cleanup := testSetup0(t)
+	defer cleanup()
+
+	h.Reset()
+
+	expect(t, nil, io.EOF, -1)(h.Seek(1, SeekCur))
+}
+
 func TestSeekPrevOne(t *testing.T) {
 	h, _, cleanup := testSetup1(t)
 	defer cleanup()
@@ -177,6 +195,26 @@ func TestSeekLastOne(t *testing.T) {
 	expect(t, b0, nil, 0)(h.Seek(0, SeekEnd))(h.Tell())
 }
 
+func TestSeekReverseOne(t *testing.T) {
+	h, b0, cleanup := testSetup1(t)
+	defer cleanup()
+
+	h.Reset()
+
+	expect(t, b0, nil, 0)(h.Seek(-1, SeekCur))(h.Tell())
+	expect(t, nil, io.EOF, -1)(h.Seek(-1, SeekCur))
+}
+
+func TestSeekForwardOne(t *testing.T) {
+	h, b0, cleanup := testSetup1(t)
+	defer cleanup()
+
+	h.Reset()
+
+	expect(t, b0, nil, 0)(h.Seek(1, SeekCur))(h.Tell())
+	expect(t, nil, io.EOF, -1)(h.Seek(1, SeekCur))
+}
+
 func TestSeekPrevTwo(t *testing.T) {
 	h, b0, _, cleanup := testSetup2(t)
 	defer cleanup()
@@ -217,4 +255,26 @@ func TestSeekLastTwo(t *testing.T) {
 	defer cleanup()
 
 	expect(t, b1, nil, 1)(h.Seek(0, SeekEnd))(h.Tell())
+}
+
+func TestSeekReverseTwo(t *testing.T) {
+	h, b0, b1, cleanup := testSetup2(t)
+	defer cleanup()
+
+	h.Reset()
+
+	expect(t, b1, nil, 1)(h.Seek(-1, SeekCur))(h.Tell())
+	expect(t, b0, nil, 0)(h.Seek(-1, SeekCur))(h.Tell())
+	expect(t, nil, io.EOF, -1)(h.Seek(-1, SeekCur))
+}
+
+func TestSeekForwardTwo(t *testing.T) {
+	h, b0, b1, cleanup := testSetup2(t)
+	defer cleanup()
+
+	h.Reset()
+
+	expect(t, b0, nil, 0)(h.Seek(1, SeekCur))(h.Tell())
+	expect(t, b1, nil, 1)(h.Seek(1, SeekCur))(h.Tell())
+	expect(t, nil, io.EOF, -1)(h.Seek(1, SeekCur))
 }
