@@ -1,6 +1,4 @@
-// +build ignore
-
-package main
+package rpg_test
 
 import (
 	"fmt"
@@ -38,7 +36,7 @@ func printContainers(s *rpg.State, ids ...rpg.ObjectIndex) {
 	}
 }
 
-func main() {
+func Example() {
 	f, err := ioutil.TempFile(os.TempDir(), "rnoadm")
 	if err != nil {
 		panic(err)
@@ -129,4 +127,24 @@ func main() {
 
 		printContainers(s, personA, personB)
 	}
+	// Output:
+	// person A has item A
+	// person B has item B
+	// Trade succeeded: true
+	// person A has item B
+	// person B has item A
+	//
+	// Forward: 0
+	// person A has item A
+	// person B has item B
+	// Forward: 1
+	// person A has item B
+	// person B has item A
+	//
+	// Reverse: 1
+	// person A has item B
+	// person B has item A
+	// Reverse: 0
+	// person A has item A
+	// person B has item B
 }
