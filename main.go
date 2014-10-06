@@ -5,21 +5,48 @@ package main
 import (
 	"fmt"
 	"github.com/Rnoadm/rpg"
+	"github.com/Rnoadm/rpg/history"
+	"io"
+	"io/ioutil"
+	"os"
 )
 
 type Name string
 
 func NameFactory(name string) rpg.ComponentFactory {
-	return Name(name).Clone
+	n := Name(name)
+	return n.Clone
 }
 
 var NameType = rpg.RegisterComponent(NameFactory(""))
 
-func (n Name) Clone(*rpg.Object) rpg.Component {
-	return n
+func (n *Name) Clone(*rpg.Object) rpg.Component {
+	clone := *n
+	return &clone
+}
+
+func (n *Name) String() string {
+	return string(*n)
+}
+
+func printContainers(s *rpg.State, ids ...rpg.ObjectIndex) {
+	for _, id := range ids {
+		p := s.Get(id)
+		for _, o := range p.Component(rpg.ContainerType).(*rpg.Container).Contents() {
+			fmt.Println(p.Component(NameType), "has", o.Component(NameType))
+		}
+	}
 }
 
 func main() {
+	f, err := ioutil.TempFile(os.TempDir(), "rnoadm")
+	if err != nil {
+		panic(err)
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	h := history.NewHistory(f)
+
 	global := rpg.NewState()
 
 	var personA, personB, itemA, itemB rpg.ObjectIndex
@@ -40,16 +67,12 @@ func main() {
 	}) {
 		panic("unreachable")
 	}
-
-	pa := global.Get(personA)
-	for _, o := range pa.Component(rpg.ContainerType).(*rpg.Container).Contents() {
-		fmt.Println(pa.Component(NameType), "has", o.Component(NameType))
+	err = h.Append(global)
+	if err != nil {
+		panic(err)
 	}
 
-	pb := global.Get(personB)
-	for _, o := range pb.Component(rpg.ContainerType).(*rpg.Container).Contents() {
-		fmt.Println(pb.Component(NameType), "has", o.Component(NameType))
-	}
+	printContainers(global, personA, personB)
 
 	fmt.Println("Trade succeeded:", global.Atomic(func(s *rpg.State) bool {
 		pa, pb, ia, ib := s.Get(personA), s.Get(personB), s.Get(itemA), s.Get(itemB)
@@ -68,13 +91,42 @@ func main() {
 		return true
 	}))
 
-	pa = global.Get(personA)
-	for _, o := range pa.Component(rpg.ContainerType).(*rpg.Container).Contents() {
-		fmt.Println(pa.Component(NameType), "has", o.Component(NameType))
+	err = h.Append(global)
+	if err != nil {
+		panic(err)
 	}
 
-	pb = global.Get(personB)
-	for _, o := range pb.Component(rpg.ContainerType).(*rpg.Container).Contents() {
-		fmt.Println(pb.Component(NameType), "has", o.Component(NameType))
+	printContainers(global, personA, personB)
+
+	fmt.Println()
+	h.Reset()
+	for {
+		s, err := h.Seek(1, history.SeekCur)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println("Forward:", h.Tell())
+
+		printContainers(s, personA, personB)
+	}
+
+	fmt.Println()
+	h.Reset()
+	for {
+		s, err := h.Seek(-1, history.SeekCur)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println("Reverse:", h.Tell())
+
+		printContainers(s, personA, personB)
 	}
 }

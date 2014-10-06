@@ -28,6 +28,14 @@ func NewHistory(f io.ReadWriteSeeker) *History {
 }
 
 func (h *History) Seek(offset int64, whence int) (*rpg.State, error) {
+	if whence == SeekCur && h.i < 0 {
+		if offset > 0 {
+			offset--
+		} else {
+			offset++
+			whence = SeekEnd
+		}
+	}
 	if whence == SeekStart || h.i < 0 {
 		if _, err := h.f.Seek(0, SeekStart); err != nil {
 			return nil, err
@@ -192,4 +200,8 @@ func (h *History) Append(s *rpg.State) error {
 
 func (h *History) Tell() int64 {
 	return h.i
+}
+
+func (h *History) Reset() {
+	h.i, h.b = -1, nil
 }
