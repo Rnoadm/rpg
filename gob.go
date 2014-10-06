@@ -25,6 +25,20 @@ func writeUvarint(buf []byte, x uint64) []byte {
 	return append(buf, b[:i]...)
 }
 
+func readVarint(buf []byte) (int64, []byte, error) {
+	x, i := binary.Varint(buf)
+	if i == 0 {
+		return x, buf, io.ErrUnexpectedEOF
+	}
+	return x, buf[i:], nil
+}
+
+func writeVarint(buf []byte, x int64) []byte {
+	var b [binary.MaxVarintLen64]byte
+	i := binary.PutVarint(b[:], x)
+	return append(buf, b[:i]...)
+}
+
 func readString(buf []byte) (string, []byte, error) {
 	l, buf, err := readUvarint(buf)
 	if err != nil {
@@ -42,18 +56,21 @@ func writeString(buf []byte, s string) []byte {
 }
 
 var (
-	ErrEncodeStateParent         = errors.New("rpg: cannot encode a child State")
-	ErrEncodeStateVersion        = errors.New("rpg: unrecognized State version")
-	ErrEncodeObjectStateless     = errors.New("rpg: cannot decode Object directly")
-	ErrEncodeObjectVersion       = errors.New("rpg: unrecognized Object version")
-	ErrEncodeContainerVersion    = errors.New("rpg: unrecognized Container version")
-	ErrEncodeContainerOutOfOrder = errors.New("rpg: Container is out of order")
+	ErrStateParent         = errors.New("rpg: cannot encode a child State")
+	ErrStateVersion        = errors.New("rpg: unrecognized State version")
+	ErrObjectStateless     = errors.New("rpg: cannot decode Object directly")
+	ErrObjectVersion       = errors.New("rpg: unrecognized Object version")
+	ErrContainerVersion    = errors.New("rpg: unrecognized Container version")
+	ErrContainerOutOfOrder = errors.New("rpg: Container is out of order")
+	ErrResourcesVersion    = errors.New("rpg: unrecognized Resources version")
+	ErrResourcesDuplicate  = errors.New("rpg: duplicate key in Resources")
 )
 
 const (
 	stateVersion     = 0
 	objectVersion    = 0
 	containerVersion = 0
+	resourcesVersion = 0
 )
 
 func (s *State) GobEncode() (data []byte, err error) {
@@ -61,7 +78,7 @@ func (s *State) GobEncode() (data []byte, err error) {
 	defer s.mtx.Unlock()
 
 	if s.parent != nil {
-		return nil, ErrEncodeStateParent
+		return nil, ErrStateParent
 	}
 
 	data = writeUvarint(data, stateVersion)
@@ -95,7 +112,7 @@ func (s *State) GobDecode(data []byte) (err error) {
 	defer s.mtx.Unlock()
 
 	if s.parent != nil {
-		return ErrEncodeStateParent
+		return ErrStateParent
 	}
 
 	version, data, err := readUvarint(data)
@@ -103,7 +120,7 @@ func (s *State) GobDecode(data []byte) (err error) {
 		return
 	}
 	if version != stateVersion {
-		return ErrEncodeStateVersion
+		return ErrStateVersion
 	}
 	if s.nextObjectID == nil {
 		s.objects = make(map[ObjectIndex]*Object)
@@ -194,7 +211,7 @@ func (o *Object) GobEncode() (data []byte, err error) {
 
 func (o *Object) GobDecode(data []byte) (err error) {
 	if o.state == nil {
-		return ErrEncodeObjectStateless
+		return ErrObjectStateless
 	}
 
 	version, data, err := readUvarint(data)
@@ -202,7 +219,7 @@ func (o *Object) GobDecode(data []byte) (err error) {
 		return
 	}
 	if version != objectVersion {
-		return ErrEncodeObjectVersion
+		return ErrObjectVersion
 	}
 
 	componentCount, data, err := readUvarint(data)
@@ -255,7 +272,7 @@ func (c *Container) GobDecode(data []byte) (err error) {
 		return
 	}
 	if version != containerVersion {
-		return ErrEncodeContainerVersion
+		return ErrContainerVersion
 	}
 	count, data, err := readUvarint(data)
 	if err != nil {
@@ -272,7 +289,71 @@ func (c *Container) GobDecode(data []byte) (err error) {
 	}
 	for i := len(c.c) - 1; i > 0; i-- {
 		if c.c[i] < c.c[i-1] {
-			return ErrEncodeContainerOutOfOrder
+			return ErrContainerOutOfOrder
+		}
+	}
+	return
+}
+
+type resourcesHeapElement struct {
+	id string
+	v  int64
+}
+type resourcesHeap []resourcesHeapElement
+
+func (h *resourcesHeap) Len() int           { return len(*h) }
+func (h *resourcesHeap) Swap(i, j int)      { (*h)[i], (*h)[j] = (*h)[j], (*h)[i] }
+func (h *resourcesHeap) Less(i, j int) bool { return (*h)[i].id < (*h)[j].id }
+func (h *resourcesHeap) Push(v interface{}) {
+	*h = append(*h, v.(resourcesHeapElement))
+}
+func (h *resourcesHeap) Pop() interface{} {
+	l := len(*h) - 1
+	v := (*h)[l]
+	*h = (*h)[:l]
+	return v
+}
+
+func (r *Resources) GobEncode() (data []byte, err error) {
+	data = writeUvarint(data, resourcesVersion)
+	data = writeUvarint(data, uint64(len(r.r)))
+	h := make(resourcesHeap, 0, len(r.r))
+	for id, v := range r.r {
+		heap.Push(&h, resourcesHeapElement{id: id, v: v})
+	}
+	for len(h) > 0 {
+		v := heap.Pop(&h).(resourcesHeapElement)
+		data = writeString(data, v.id)
+		data = writeVarint(data, v.v)
+	}
+	return
+}
+
+func (r *Resources) GobDecode(data []byte) (err error) {
+	version, data, err := readUvarint(data)
+	if err != nil {
+		return
+	}
+	if version != resourcesVersion {
+		return ErrResourcesVersion
+	}
+	count, data, err := readUvarint(data)
+	if err != nil {
+		return
+	}
+	r.r = make(map[string]int64, count)
+	for i := uint64(0); i < count; i++ {
+		var id string
+		id, data, err = readString(data)
+		if err != nil {
+			return
+		}
+		if _, ok := r.r[id]; ok {
+			return ErrResourcesDuplicate
+		}
+		r.r[id], data, err = readVarint(data)
+		if err != nil {
+			return
 		}
 	}
 	return
