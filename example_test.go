@@ -9,29 +9,13 @@ import (
 	"os"
 )
 
-type Name string
-
-func NameFactory(name string) rpg.ComponentFactory {
-	n := Name(name)
-	return n.Clone
-}
-
-var NameType = rpg.RegisterComponent(NameFactory(""))
-
-func (n *Name) Clone(*rpg.Object) rpg.Component {
-	clone := *n
-	return &clone
-}
-
-func (n *Name) String() string {
-	return string(*n)
-}
-
-func printContainers(s *rpg.State, ids ...rpg.ObjectIndex) {
-	for _, id := range ids {
+func printContainers(s *rpg.State) {
+	for _, id := range s.IDs() {
 		p := s.Get(id)
-		for _, o := range p.Component(rpg.ContainerType).(*rpg.Container).Contents() {
-			fmt.Println(p.Component(NameType), "has", o.Component(NameType))
+		if container, ok := p.Component(rpg.ContainerType).(*rpg.Container); ok {
+			for _, o := range container.Contents() {
+				fmt.Println(p.Component(rpg.NameType), "has", o.Component(rpg.NameType))
+			}
 		}
 	}
 }
@@ -50,10 +34,10 @@ func Example() {
 	var personA, personB, itemA, itemB rpg.ObjectIndex
 	if !global.Atomic(func(s *rpg.State) bool {
 		var pa, pb, ia, ib *rpg.Object
-		personA, pa = s.Create(NameFactory("person A"), rpg.ContainerFactory)
-		personB, pb = s.Create(NameFactory("person B"), rpg.ContainerFactory)
-		itemA, ia = s.Create(NameFactory("item A"))
-		itemB, ib = s.Create(NameFactory("item B"))
+		personA, pa = s.Create(rpg.NameFactory("person A"), rpg.ContainerFactory)
+		personB, pb = s.Create(rpg.NameFactory("person B"), rpg.ContainerFactory)
+		itemA, ia = s.Create(rpg.NameFactory("item A"))
+		itemB, ib = s.Create(rpg.NameFactory("item B"))
 
 		if !pa.Component(rpg.ContainerType).(*rpg.Container).Add(ia) {
 			panic("unreachable")
@@ -70,7 +54,7 @@ func Example() {
 		panic(err)
 	}
 
-	printContainers(global, personA, personB)
+	printContainers(global)
 
 	fmt.Println("Trade succeeded:", global.Atomic(func(s *rpg.State) bool {
 		pa, pb, ia, ib := s.Get(personA), s.Get(personB), s.Get(itemA), s.Get(itemB)
@@ -94,7 +78,7 @@ func Example() {
 		panic(err)
 	}
 
-	printContainers(global, personA, personB)
+	printContainers(global)
 
 	fmt.Println()
 	h.Reset()
@@ -108,8 +92,7 @@ func Example() {
 		}
 
 		fmt.Println("Forward:", h.Tell())
-
-		printContainers(s, personA, personB)
+		printContainers(s)
 	}
 
 	fmt.Println()
@@ -124,8 +107,7 @@ func Example() {
 		}
 
 		fmt.Println("Reverse:", h.Tell())
-
-		printContainers(s, personA, personB)
+		printContainers(s)
 	}
 	// Output:
 	// person A has item A

@@ -26,10 +26,21 @@ func (r *Resources) Clone(o *Object) Component {
 }
 
 func (r *Resources) Get(id string) int64 {
-	return r.r[id]
+	v := r.r[id]
+	if p := r.o.Parent(); p != nil {
+		if rp, ok := p.Component(ResourcesType).(*Resources); ok {
+			v += rp.Get(id)
+		}
+	}
+	return v
 }
 
 func (r *Resources) Set(id string, v int64) {
+	if p := r.o.Parent(); p != nil {
+		if rp, ok := p.Component(ResourcesType).(*Resources); ok {
+			v -= rp.Get(id)
+		}
+	}
 	r.r[id] = v
 	r.o.Modified()
 }

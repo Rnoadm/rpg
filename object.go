@@ -43,7 +43,7 @@ func typeName(t reflect.Type) string {
 
 // Object represents a person, place, or thing in a State.
 type Object struct {
-	id         ObjectIndex
+	id, parent ObjectIndex
 	components map[reflect.Type]Component
 	version    uint64
 	modified   bool
@@ -58,6 +58,14 @@ func (o *Object) State() *State { return o.state }
 
 // Component returns the Component of the given type if one exists in this Object.
 func (o *Object) Component(t reflect.Type) Component { return o.components[t] }
+
+// ID returns the parent of this Object if it has one.
+func (o *Object) Parent() *Object {
+	if o.parent == 0 {
+		return nil
+	}
+	return o.state.Get(o.parent)
+}
 
 func (o *Object) clone(s *State) *Object {
 	clone := &Object{
@@ -74,8 +82,15 @@ func (o *Object) clone(s *State) *Object {
 	return clone
 }
 
-// Modified notifies this Object that one of its Components has been modified. This is
-// required for State.Atomic to function properly.
+// Modified notifies o that one of its Components has been modified. This is required
+// for State.Atomic to function properly.
 func (o *Object) Modified() {
 	o.modified = true
+}
+
+// Create is the same as State.Create but the Object derives from o.
+func (o *Object) Create(factories ...ComponentFactory) (ObjectIndex, *Object) {
+	id, o2 := o.state.Create(factories...)
+	o2.parent = o.id
+	return id, o2
 }

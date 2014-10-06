@@ -68,7 +68,7 @@ var (
 
 const (
 	stateVersion     = 0
-	objectVersion    = 0
+	objectVersion    = 1
 	containerVersion = 0
 	resourcesVersion = 0
 )
@@ -185,6 +185,7 @@ func (h *componentHeap) Pop() interface{} {
 // GobEncode implements gob.GobEncoder
 func (o *Object) GobEncode() (data []byte, err error) {
 	data = writeUvarint(data, objectVersion)
+	data = writeUvarint(data, uint64(o.parent))
 
 	h := make(componentHeap, 0, len(o.components))
 	for t, c := range o.components {
@@ -222,8 +223,17 @@ func (o *Object) GobDecode(data []byte) (err error) {
 	if err != nil {
 		return
 	}
-	if version != objectVersion {
+	if version > objectVersion {
 		return ErrObjectVersion
+	}
+
+	if version >= 1 {
+		var parent uint64
+		parent, data, err = readUvarint(data)
+		if err != nil {
+			return
+		}
+		o.parent = ObjectIndex(parent)
 	}
 
 	componentCount, data, err := readUvarint(data)
