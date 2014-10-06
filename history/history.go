@@ -84,16 +84,8 @@ func (h *History) seekForward() error {
 		return err
 	}
 
-	patch := make([]byte, size)
+	patch := make([]byte, size+sizeof_int64)
 	_, err = io.ReadFull(h.f, patch)
-	if err != nil {
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
-		}
-		return err
-	}
-
-	_, err = h.f.Seek(sizeof_int64, SeekCur)
 	if err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
@@ -103,7 +95,7 @@ func (h *History) seekForward() error {
 
 	h.i++
 
-	h.b, err = bindiff.Forward(h.b, patch)
+	h.b, err = bindiff.Forward(h.b, patch[:size])
 
 	return err
 }
@@ -130,7 +122,7 @@ func (h *History) seekReverse() error {
 		return err
 	}
 
-	_, err = h.f.Seek(-size-sizeof_int64*2, SeekCur)
+	_, err = h.f.Seek(-size-sizeof_int64, SeekCur)
 	if err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
@@ -138,7 +130,7 @@ func (h *History) seekReverse() error {
 		return err
 	}
 
-	patch := make([]byte, sizeof_int64+size)
+	patch := make([]byte, size+sizeof_int64)
 	_, err = io.ReadFull(h.f, patch)
 	if err != nil {
 		if err == io.EOF {
@@ -149,7 +141,7 @@ func (h *History) seekReverse() error {
 
 	h.i--
 
-	h.b, err = bindiff.Reverse(h.b, patch[sizeof_int64:])
+	h.b, err = bindiff.Reverse(h.b, patch[:size])
 
 	return err
 }
