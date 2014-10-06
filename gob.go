@@ -73,6 +73,7 @@ const (
 	resourcesVersion = 0
 )
 
+// GobEncode implements gob.GobEncoder
 func (s *State) GobEncode() (data []byte, err error) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
@@ -107,6 +108,7 @@ func (s *State) GobEncode() (data []byte, err error) {
 	return
 }
 
+// GobDecode implements gob.GobDecoder
 func (s *State) GobDecode(data []byte) (err error) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
@@ -180,6 +182,7 @@ func (h *componentHeap) Pop() interface{} {
 	return v
 }
 
+// GobEncode implements gob.GobEncoder
 func (o *Object) GobEncode() (data []byte, err error) {
 	data = writeUvarint(data, objectVersion)
 
@@ -209,6 +212,7 @@ func (o *Object) GobEncode() (data []byte, err error) {
 	return
 }
 
+// GobDecode implements gob.GobDecoder
 func (o *Object) GobDecode(data []byte) (err error) {
 	if o.state == nil {
 		return ErrObjectStateless
@@ -257,6 +261,7 @@ func (o *Object) GobDecode(data []byte) (err error) {
 	return
 }
 
+// GobEncode implements gob.GobEncoder
 func (c *Container) GobEncode() (data []byte, err error) {
 	data = writeUvarint(data, containerVersion)
 	data = writeUvarint(data, uint64(len(c.c)))
@@ -266,6 +271,7 @@ func (c *Container) GobEncode() (data []byte, err error) {
 	return
 }
 
+// GobDecode implements gob.GobDecoder
 func (c *Container) GobDecode(data []byte) (err error) {
 	version, data, err := readUvarint(data)
 	if err != nil {
@@ -314,6 +320,7 @@ func (h *resourcesHeap) Pop() interface{} {
 	return v
 }
 
+// GobEncode implements gob.GobEncoder
 func (r *Resources) GobEncode() (data []byte, err error) {
 	data = writeUvarint(data, resourcesVersion)
 	data = writeUvarint(data, uint64(len(r.r)))
@@ -329,6 +336,7 @@ func (r *Resources) GobEncode() (data []byte, err error) {
 	return
 }
 
+// GobDecode implements gob.GobDecoder
 func (r *Resources) GobDecode(data []byte) (err error) {
 	version, data, err := readUvarint(data)
 	if err != nil {

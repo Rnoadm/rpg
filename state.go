@@ -1,11 +1,14 @@
+// Package rpg provides a base API for a role playing game.
 package rpg
 
 import (
 	"reflect"
+	"sort"
 	"sync"
 	"sync/atomic"
 )
 
+// State represents a set of Object that can be modified concurrently using compare-and-set.
 type State struct {
 	parent  *State
 	objects map[ObjectIndex]*Object
@@ -14,6 +17,7 @@ type State struct {
 	nextObjectID, nextObjectVersion *uint64
 }
 
+// NewState initializes an empty State.
 func NewState() *State {
 	return newState(nil)
 }
@@ -32,6 +36,10 @@ func newState(parent *State) *State {
 	return s
 }
 
+// Atomic calls f and tries to apply its changes. This is the only way a State should be
+// modified. f may be called multiple times if other calls to Atomic are being processed
+// at the same time. Returning false from f causes Atomic to return false without
+// applying the changes.
 func (s *State) Atomic(f func(*State) bool) bool {
 retry:
 	for {
@@ -66,6 +74,9 @@ retry:
 	}
 }
 
+// Create initializes a new Object and returns it and its ObjectIndex. The factories
+// must not be duplicate and must be pre-registered. The id is unique for all Objects
+// in this State heirarchy.
 func (s *State) Create(factories ...ComponentFactory) (id ObjectIndex, o *Object) {
 	id = ObjectIndex(atomic.AddUint64(s.nextObjectID, 1))
 	o = &Object{
@@ -95,6 +106,7 @@ func (s *State) Create(factories ...ComponentFactory) (id ObjectIndex, o *Object
 	return
 }
 
+// Get returns the Object identified by id. The object is specific to this State.
 func (s *State) Get(id ObjectIndex) *Object {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
@@ -102,9 +114,54 @@ func (s *State) Get(id ObjectIndex) *Object {
 	if o, ok := s.objects[id]; ok {
 		return o
 	}
+	if s.parent == nil {
+		return nil
+	}
 
-	o := s.parent.Get(id).Clone(s)
+	o := s.parent.Get(id)
+	if o == nil {
+		return nil
+	}
+
+	o = o.clone(s)
 	s.objects[id] = o
 
 	return o
+}
+
+// IDs returns the set of ObjectIndex accessible from s in ascending order.
+func (s *State) IDs() []ObjectIndex {
+	ids := s.appendIDs(nil)
+	sort.Sort(sortedObjectIndices(ids))
+	return ids
+}
+
+func (s *State) appendIDs(ids []ObjectIndex) []ObjectIndex {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	if s.parent != nil {
+		ids = s.parent.appendIDs(ids)
+	}
+
+	for id := range s.objects {
+		if s.parent == nil || !s.parent.hasID(id) {
+			ids = append(ids, id)
+		}
+	}
+
+	return ids
+}
+
+func (s *State) hasID(id ObjectIndex) bool {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	if _, ok := s.objects[id]; ok {
+		return true
+	}
+	if s.parent == nil {
+		return false
+	}
+	return s.parent.hasID(id)
 }

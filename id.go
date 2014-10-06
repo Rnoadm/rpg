@@ -2,6 +2,7 @@ package rpg
 
 import "sort"
 
+// ObjectIndex is the ID of an Object in a State.
 type ObjectIndex uint64
 
 type sortedObjectIndices []ObjectIndex

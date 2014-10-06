@@ -5,16 +5,22 @@ import (
 	"reflect"
 )
 
+// ComponentFactory constructs a Component for use with the given Object. The underlying
+// type of the Component must be a pointer type. The Object is nil when the function is
+// called from RegisterComponent.
 type ComponentFactory func(*Object) Component
 
+// Component represents a feature of an Object.
 type Component interface {
+	// Clone duplicates this Component and replaces the cloned Component's Object
+	// with the given Object.
 	Clone(*Object) Component
 }
 
-var (
-	registeredComponents = make(map[string]ComponentFactory)
-)
+var registeredComponents = make(map[string]ComponentFactory)
 
+// RegisterComponent allows a ComponentFactory to be used with State.Create. It returns
+// the reflect.Type of the Component which can be used in Object.Component.
 func RegisterComponent(f ComponentFactory) reflect.Type {
 	c := f(nil)
 	t := reflect.TypeOf(c)
@@ -35,6 +41,7 @@ func typeName(t reflect.Type) string {
 	return fmt.Sprintf("%s%q.%s", star, t.PkgPath(), t.Name())
 }
 
+// Object represents a person, place, or thing in a State.
 type Object struct {
 	id         ObjectIndex
 	components map[reflect.Type]Component
@@ -43,11 +50,16 @@ type Object struct {
 	state      *State
 }
 
-func (o *Object) ID() ObjectIndex                    { return o.id }
-func (o *Object) State() *State                      { return o.state }
+// ID returns the ID of this Object.
+func (o *Object) ID() ObjectIndex { return o.id }
+
+// State returns the State this Object exists within.
+func (o *Object) State() *State { return o.state }
+
+// Component returns the Component of the given type if one exists in this Object.
 func (o *Object) Component(t reflect.Type) Component { return o.components[t] }
 
-func (o *Object) Clone(s *State) *Object {
+func (o *Object) clone(s *State) *Object {
 	clone := &Object{
 		id:         o.id,
 		components: make(map[reflect.Type]Component, len(o.components)),
@@ -62,6 +74,8 @@ func (o *Object) Clone(s *State) *Object {
 	return clone
 }
 
+// Modified notifies this Object that one of its Components has been modified. This is
+// required for State.Atomic to function properly.
 func (o *Object) Modified() {
 	o.modified = true
 }
