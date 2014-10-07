@@ -65,6 +65,7 @@ var (
 	ErrResourcesVersion    = errors.New("rpg: unrecognized Resources version")
 	ErrResourcesDuplicate  = errors.New("rpg: duplicate key in Resources")
 	ErrLocationVersion     = errors.New("rpg: unrecognized Location version")
+	ErrMessagesVersion     = errors.New("rpg: unrecognized Messages version")
 )
 
 const (
@@ -73,6 +74,7 @@ const (
 	containerVersion = 0
 	resourcesVersion = 0
 	locationVersion  = 0
+	messagesVersion  = 0
 )
 
 // GobEncode implements gob.GobEncoder
@@ -413,5 +415,37 @@ func (l *Location) GobDecode(data []byte) (err error) {
 	if err != nil {
 		return
 	}
+	return
+}
+
+// GobEncode implements gob.GobEncoder
+func (m *Messages) GobEncode() (data []byte, err error) {
+	data = writeUvarint(data, messagesVersion)
+
+	var buf bytes.Buffer
+	err = gob.NewEncoder(&buf).Encode(&m.m)
+	if err != nil {
+		return
+	}
+	data = append(data, buf.Bytes()...)
+
+	return
+}
+
+// GobDecode implements gob.GobDecoder
+func (m *Messages) GobDecode(data []byte) (err error) {
+	version, data, err := readUvarint(data)
+	if err != nil {
+		return
+	}
+	if version != messagesVersion {
+		return ErrMessagesVersion
+	}
+
+	err = gob.NewDecoder(bytes.NewReader(data)).Decode(&m.m)
+	if err != nil {
+		return
+	}
+
 	return
 }
