@@ -19,7 +19,9 @@ func (o *sortedObjectIndices) add(id ObjectIndex) bool {
 		return false
 	}
 
-	*o = append((*o)[:i], append(sortedObjectIndices{id}, (*o)[i:]...)...)
+	*o = append(*o, 0)
+	copy((*o)[i+1:], (*o)[i:])
+	(*o)[i] = id
 	return true
 }
 func (o *sortedObjectIndices) remove(id ObjectIndex) bool {
