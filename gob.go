@@ -64,6 +64,7 @@ var (
 	ErrContainerOutOfOrder = errors.New("rpg: Container is out of order")
 	ErrResourcesVersion    = errors.New("rpg: unrecognized Resources version")
 	ErrResourcesDuplicate  = errors.New("rpg: duplicate key in Resources")
+	ErrLocationVersion     = errors.New("rpg: unrecognized Location version")
 )
 
 const (
@@ -71,6 +72,7 @@ const (
 	objectVersion    = 1
 	containerVersion = 0
 	resourcesVersion = 0
+	locationVersion  = 0
 )
 
 // GobEncode implements gob.GobEncoder
@@ -126,6 +128,7 @@ func (s *State) GobDecode(data []byte) (err error) {
 	}
 	if s.nextObjectID == nil {
 		s.objects = make(map[ObjectIndex]*Object)
+		s.by_component = make(map[reflect.Type][]ObjectIndex)
 		s.nextObjectID = new(uint64)
 		s.nextObjectVersion = new(uint64)
 	}
@@ -159,6 +162,9 @@ func (s *State) GobDecode(data []byte) (err error) {
 			return
 		}
 		s.objects[o.id] = o
+		for t := range o.components {
+			s.by_component[t] = append(s.by_component[t], o.id)
+		}
 	}
 	return
 }
@@ -373,6 +379,39 @@ func (r *Resources) GobDecode(data []byte) (err error) {
 		if err != nil {
 			return
 		}
+	}
+	return
+}
+
+// GobEncode implements gob.GobEncoder
+func (l *Location) GobEncode() (data []byte, err error) {
+	data = writeUvarint(data, locationVersion)
+	data = writeVarint(data, l.x)
+	data = writeVarint(data, l.y)
+	data = writeVarint(data, l.z)
+	return
+}
+
+// GobDecode implements gob.GobDecoder
+func (l *Location) GobDecode(data []byte) (err error) {
+	version, data, err := readUvarint(data)
+	if err != nil {
+		return
+	}
+	if version != locationVersion {
+		return ErrLocationVersion
+	}
+	l.x, data, err = readVarint(data)
+	if err != nil {
+		return
+	}
+	l.y, data, err = readVarint(data)
+	if err != nil {
+		return
+	}
+	l.z, data, err = readVarint(data)
+	if err != nil {
+		return
 	}
 	return
 }

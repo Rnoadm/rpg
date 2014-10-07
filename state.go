@@ -10,9 +10,10 @@ import (
 
 // State represents a set of Object that can be modified concurrently using compare-and-set.
 type State struct {
-	parent  *State
-	objects map[ObjectIndex]*Object
-	mtx     sync.Mutex
+	parent       *State
+	objects      map[ObjectIndex]*Object
+	by_component map[reflect.Type][]ObjectIndex
+	mtx          sync.Mutex
 
 	nextObjectID, nextObjectVersion *uint64
 }
@@ -24,8 +25,9 @@ func NewState() *State {
 
 func newState(parent *State) *State {
 	s := &State{
-		parent:  parent,
-		objects: make(map[ObjectIndex]*Object),
+		parent:       parent,
+		objects:      make(map[ObjectIndex]*Object),
+		by_component: make(map[reflect.Type][]ObjectIndex),
 	}
 	if parent == nil {
 		var a [2]uint64
@@ -70,6 +72,9 @@ retry:
 			o.version = atomic.AddUint64(s.nextObjectVersion, 1)
 			s.objects[id] = o
 		}
+		for t, m := range child.by_component {
+			s.by_component[t] = append(s.by_component[t], m...)
+		}
 		return true
 	}
 }
@@ -101,6 +106,9 @@ func (s *State) Create(factories ...ComponentFactory) (id ObjectIndex, o *Object
 
 	s.mtx.Lock()
 	s.objects[id] = o
+	for t := range o.components {
+		s.by_component[t] = append(s.by_component[t], id)
+	}
 	s.mtx.Unlock()
 
 	return
@@ -164,4 +172,23 @@ func (s *State) hasID(id ObjectIndex) bool {
 		return false
 	}
 	return s.parent.hasID(id)
+}
+
+// ByComponent returns a sorted set of IDs of objects that have the given component type.
+func (s *State) ByComponent(t reflect.Type) []ObjectIndex {
+	ids := s.byComponent(t)
+	sort.Sort(sortedObjectIndices(ids))
+	return ids
+}
+
+func (s *State) byComponent(t reflect.Type) []ObjectIndex {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	var ids []ObjectIndex
+	if s.parent != nil {
+		ids = s.parent.byComponent(t)
+	}
+
+	return append(ids, s.by_component[t]...)
 }

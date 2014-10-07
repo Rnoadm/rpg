@@ -10,12 +10,10 @@ import (
 )
 
 func printContainers(s *rpg.State) {
-	for _, id := range s.IDs() {
+	for _, id := range s.ByComponent(rpg.ContainerType) {
 		p := s.Get(id)
-		if container, ok := p.Component(rpg.ContainerType).(*rpg.Container); ok {
-			for _, o := range container.Contents() {
-				fmt.Println(p.Component(rpg.NameType), "has", o.Component(rpg.NameType))
-			}
+		for _, o := range p.Component(rpg.ContainerType).(*rpg.Container).Contents() {
+			fmt.Println(p.Component(rpg.NameType), "has", o.Component(rpg.NameType))
 		}
 	}
 }
