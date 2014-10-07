@@ -59,6 +59,19 @@ func (o *Object) State() *State { return o.state }
 // Component returns the Component of the given type if one exists in this Object.
 func (o *Object) Component(t reflect.Type) Component { return o.components[t] }
 
+// ComponentAny returns the Component of the given type if one exists in this Object. If
+// o.Parent is non-nil, ComponentAny will try to return the parent's component, recursively.
+// The returned Component should not be modified.
+func (o *Object) ComponentAny(t reflect.Type) Component {
+	if c, ok := o.components[t]; ok {
+		return c
+	}
+	if p := o.Parent(); p != nil {
+		return p.ComponentAny(t)
+	}
+	return nil
+}
+
 // ID returns the parent of this Object if it has one.
 func (o *Object) Parent() *Object {
 	if o.parent == 0 {
