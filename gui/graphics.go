@@ -77,6 +77,10 @@ func (g *graphicsHandler) Paint(cliprect image.Rectangle) *image.RGBA {
 }
 
 func (g *graphicsHandler) Mouse(e ui.MouseEvent) {
+	if e.Down != 1 {
+		return
+	}
+
 	defer area.RepaintAll()
 
 	x, y := e.Pos.X, e.Pos.Y
@@ -88,8 +92,6 @@ func (g *graphicsHandler) Mouse(e ui.MouseEvent) {
 }
 
 func (g *graphicsHandler) Key(e ui.KeyEvent) (handled bool) {
-	defer area.RepaintAll()
-
 	if e.Up {
 		return false
 	}
@@ -99,6 +101,8 @@ func (g *graphicsHandler) Key(e ui.KeyEvent) (handled bool) {
 	if e.Modifiers&^ui.Shift != 0 {
 		return false
 	}
+
+	defer area.RepaintAll()
 
 	if e.Key == '\b' {
 		return g.handler.Key(Backspace)
