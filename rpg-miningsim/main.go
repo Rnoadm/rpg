@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -166,6 +167,10 @@ func (p *Pickaxe) Use(x, y, z int64) (rpg.ObjectIndex, *rpg.Object, error) {
 	return id, o, nil
 }
 
+func (p *Pickaxe) Durability() int {
+	return int(p.d)
+}
+
 func (p *Pickaxe) GobEncode() (data []byte, err error) {
 	data = append(data, p.d)
 	return
@@ -244,12 +249,18 @@ func main() {
 		panic(err)
 	}
 
+	pickaxeCount, err := png.Decode(bytes.NewReader(MiningsimPickcountPng))
+	if err != nil {
+		panic(err)
+	}
+
 	gui.Main("Mining Simulator 2014", &Handler{
 		h:              h,
 		s:              s,
 		playerSprite:   playerSprite,
 		fontSprites:    fontSprites.(*image.Paletted),
 		terrainSprites: terrainSprites.(*image.Paletted),
+		pickaxeCount:   pickaxeCount.(*image.Paletted),
 		nextFrame:      nextFrame,
 		replayDone:     replayDone,
 	})
@@ -261,6 +272,7 @@ type Handler struct {
 	playerSprite   image.Image
 	fontSprites    *image.Paletted
 	terrainSprites *image.Paletted
+	pickaxeCount   *image.Paletted
 	nextFrame      <-chan struct{}
 	replayDone     chan<- struct{}
 }
@@ -337,6 +349,27 @@ func (v *Handler) SpriteAt(x, y, w, h int) (sprite *gui.Sprite) {
 			sprite.Fg = gui.ColorBrightRed
 			sprite.Bg = gui.ColorBlack
 		}
+		if h-1 == y {
+			d := 0
+			for _, o := range player.Component(rpg.ContainerType).(*rpg.Container).ByComponent(PickaxeType) {
+				d += o.Component(PickaxeType).(*Pickaxe).Durability()
+			}
+			charges := strconv.Itoa(d)
+			if x+len(charges)-w >= -1 {
+				if x+len(charges)-w == -1 {
+					sprite.Images = append(sprite.Images, v.pickaxeCount)
+					sprite.Rune = '×'
+					sprite.Fg = gui.ColorWhite
+					sprite.Bg = gui.ColorBlack
+				} else {
+					c := charges[x+len(charges)-w]
+					sprite.Images = append(sprite.Images, v.pickaxeCount.SubImage(image.Rect(int(c-'0'+1)*16, 0, int(c-'0'+2)*16, 16)))
+					sprite.Rune = rune(c)
+					sprite.Fg = gui.ColorBrightWhite
+					sprite.Bg = gui.ColorBlack
+				}
+			}
+		}
 		return false
 	})
 
@@ -352,6 +385,32 @@ func (v *Handler) Mouse(x, y, w, h int) {
 }
 
 func (v *Handler) Rune(r rune) (handled bool) {
+	switch r {
+	case 'p':
+		v.s.Atomic(func(s *rpg.State) bool {
+			player := s.Get(s.ByComponent(PlayerType)[0])
+			inventory := player.Component(rpg.ContainerType).(*rpg.Container)
+			ores := inventory.ByComponent(OreType)
+			if len(ores) == 0 {
+				player.Component(rpg.MessagesType).(*rpg.Messages).Append(rpg.Message{
+					Kind:   "error",
+					Source: player.ID(),
+					Text:   "no ores available",
+					Time:   v.h.Tell() + 1,
+				})
+				return true
+			}
+
+			ore := ores[0]
+			inventory.Remove(ore)
+			s.Delete(ore.ID())
+			_, pickaxe := s.Create(PickaxeFactory, rpg.LocationFactory)
+			inventory.Add(pickaxe)
+
+			return true
+		})
+		v.h.Append(v.s)
+	}
 	return false
 }
 
