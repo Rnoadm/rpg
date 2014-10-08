@@ -16,12 +16,26 @@ func mainGraphics(title string, handler Interface) error {
 }
 
 func goGraphics(title string, handler Interface) {
-	const w, h = 800, 600
-	area = ui.NewArea(w, h, &graphicsHandler{handler, w, h})
-	window = ui.NewWindow(title, w, h, area)
+	ui.Do(func() {
+		w, h := handler.SpriteSize()
+		w *= 80
+		h *= 25
+		area = ui.NewArea(w, h, &graphicsHandler{handler, w, h})
+		window = ui.NewWindow(title, w, h, area)
 
-	window.OnClosing(func() bool {
-		return handler.Closing()
+		window.OnClosing(func() bool {
+			if handler.Closing() {
+				select {
+				case <-exitch:
+				default:
+					close(exitch)
+				}
+				return true
+			}
+			return false
+		})
+
+		window.Show()
 	})
 
 	<-exitch
