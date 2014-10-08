@@ -392,19 +392,18 @@ func (v *Handler) moveCharacter(dx, dy int64) {
 		if !minedLocations.Has(x, y, z) {
 			container := player.Component(rpg.ContainerType).(*rpg.Container)
 			var msg *rpg.Message
-			for _, item := range container.Contents() {
-				if p, ok := item.Component(PickaxeType).(*Pickaxe); ok {
-					_, o, err := p.Use(x, y, z)
-					if err == nil {
-						container.Add(o)
-						break
-					}
-					msg = &rpg.Message{
-						Kind:   "error",
-						Source: item.ID(),
-						Time:   v.h.Tell() + 1,
-						Text:   err.Error(),
-					}
+			for _, item := range container.ByComponent(PickaxeType) {
+				p := item.Component(PickaxeType).(*Pickaxe)
+				_, o, err := p.Use(x, y, z)
+				if err == nil {
+					container.Add(o)
+					break
+				}
+				msg = &rpg.Message{
+					Kind:   "error",
+					Source: item.ID(),
+					Time:   v.h.Tell() + 1,
+					Text:   err.Error(),
 				}
 			}
 			if msg != nil {

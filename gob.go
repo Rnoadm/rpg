@@ -312,10 +312,11 @@ func (c *Container) GobDecode(data []byte) (err error) {
 		c.c[i] = ObjectIndex(id)
 	}
 	for i := len(c.c) - 1; i > 0; i-- {
-		if c.c[i] < c.c[i-1] {
+		if c.c[i] <= c.c[i-1] {
 			return ErrContainerOutOfOrder
 		}
 	}
+	c.by_component = nil
 	return
 }
 
