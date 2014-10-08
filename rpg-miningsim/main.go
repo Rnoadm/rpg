@@ -410,6 +410,7 @@ func (v *Handler) Rune(r rune) (handled bool) {
 			return true
 		})
 		v.h.Append(v.s)
+		return true
 	}
 	return false
 }
