@@ -1,4 +1,6 @@
 language: go
 before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -qq libgtk-3-dev
   - go get code.google.com/p/go.tools/cmd/cover
 script: go test -bench . -benchmem -cover ./...
