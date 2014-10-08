@@ -23,19 +23,27 @@ func mainText(handler Interface) error {
 			// we repaint on the next iteration
 
 		case termbox.EventMouse:
-			// TODO
+			w, h := termbox.Size()
+			handler.Mouse(event.MouseX, event.MouseY, w, h)
 
 		case termbox.EventKey:
+			if event.Ch == 0 && event.Key == termbox.KeyEnter {
+				event.Ch = '\n'
+			}
 			if event.Ch == 0 {
+				if k, ok := textKeys[event.Key]; ok {
+					if handler.Key(k) {
+						continue
+					}
+				}
+
 				if event.Key == termbox.KeyEsc {
 					if handler.Closing() {
 						return nil
 					}
 				}
-
-				// TODO
 			} else {
-				// TODO
+				handler.Rune(event.Ch)
 			}
 		}
 

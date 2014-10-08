@@ -42,11 +42,11 @@ func (l *Location) Set(x, y, z int64) {
 	l.o.Modified()
 }
 
-// Dist returns the distance squared between l and o.
-func (l *Location) Dist(o *Location) int64 {
-	x := l.x - o.x
-	y := l.y - o.y
-	z := l.z - o.z
+// Dist returns the distance squared between l and (x,y,z).
+func (l *Location) Dist(x, y, z int64) int64 {
+	x -= l.x
+	y -= l.y
+	z -= l.z
 	return x*x + y*y + z*z
 }
 

@@ -14,6 +14,10 @@ import (
 	"sort"
 )
 
+func init() {
+	rpg.MaxMessages = 1
+}
+
 type Player struct{}
 
 func PlayerFactory(o *rpg.Object) rpg.Component {
@@ -115,18 +119,18 @@ func (m *MinedLocations) GobDecode(data []byte) (err error) {
 }
 
 type Pickaxe struct {
-	Durability uint8
-	o          *rpg.Object
+	d uint8
+	o *rpg.Object
 }
 
 func PickaxeFactory(o *rpg.Object) rpg.Component {
-	return &Pickaxe{Durability: 10, o: o}
+	return &Pickaxe{d: 10, o: o}
 }
 
 var PickaxeType = rpg.RegisterComponent(PickaxeFactory)
 
 func (p *Pickaxe) Clone(o *rpg.Object) rpg.Component {
-	return &Pickaxe{Durability: p.Durability, o: o}
+	return &Pickaxe{d: p.d, o: o}
 }
 
 var (
@@ -135,24 +139,33 @@ var (
 	ErrNoOreThere    = errors.New("no ore at target location")
 )
 
-func (p *Pickaxe) Use(l *rpg.Location) (rpg.ObjectIndex, *rpg.Object, error) {
-	if p.Durability == 0 {
+func (p *Pickaxe) Use(x, y, z int64) (rpg.ObjectIndex, *rpg.Object, error) {
+	if p.d == 0 {
 		return 0, nil, ErrPickaxeBroken
 	}
-	if p.o.Component(rpg.LocationType).(*rpg.Location).Dist(l) > 1*1 {
+	if p.o.Component(rpg.LocationType).(*rpg.Location).Dist(x, y, z) > 1*1 {
 		return 0, nil, ErrCantReach
 	}
 
 	m := p.o.State().Get(p.o.State().ByComponent(MinedLocationsType)[0]).Component(MinedLocationsType).(*MinedLocations)
-	if m.Has(l.Get()) {
+	if m.Has(x, y, z) {
 		return 0, nil, ErrNoOreThere
 	}
 
 	id, o := p.o.State().Create(OreFactory)
-	m.Add(l.Get())
-	p.Durability--
+	m.Add(x, y, z)
+	p.d--
 	p.o.Modified()
 	return id, o, nil
+}
+
+func (p *Pickaxe) GobEncode() (data []byte, err error) {
+	data = append(data, p.d)
+	return
+}
+func (p *Pickaxe) GobDecode(data []byte) (err error) {
+	p.d = data[0]
+	return
 }
 
 func main() {
@@ -191,13 +204,25 @@ func main() {
 		panic(err)
 	}
 
-	gui.Main("Mining Simulator 2014", &Handler{h: h, s: s, playerSprite: playerSprite})
+	fontSprites, err := png.Decode(bytes.NewReader(MiningsimFontPng))
+	if err != nil {
+		panic(err)
+	}
+
+	terrainSprites, err := png.Decode(bytes.NewReader(MiningsimTerrainPng))
+	if err != nil {
+		panic(err)
+	}
+
+	gui.Main("Mining Simulator 2014", &Handler{h: h, s: s, playerSprite: playerSprite, fontSprites: fontSprites.(*image.Paletted), terrainSprites: terrainSprites.(*image.Paletted)})
 }
 
 type Handler struct {
-	h            *history.History
-	s            *rpg.State
-	playerSprite image.Image
+	h              *history.History
+	s              *rpg.State
+	playerSprite   image.Image
+	fontSprites    *image.Paletted
+	terrainSprites *image.Paletted
 }
 
 func (v *Handler) Closing() bool {
@@ -212,6 +237,8 @@ func (v *Handler) SpriteAt(x, y, w, h int) (sprite *gui.Sprite) {
 
 		center := player.Component(rpg.LocationType).(*rpg.Location)
 
+		m := player.Component(rpg.MessagesType).(*rpg.Messages)
+
 		minedLocations := s.Get(s.ByComponent(MinedLocationsType)[0]).Component(MinedLocationsType).(*MinedLocations)
 
 		ex, ey, ez := center.Get()
@@ -221,26 +248,39 @@ func (v *Handler) SpriteAt(x, y, w, h int) (sprite *gui.Sprite) {
 
 		sprite = &gui.Sprite{}
 
+		if minedLocations.Has(ex, ey, ez) {
+			sprite.Images = append(sprite.Images, v.terrainSprites.SubImage(image.Rect(int(((ex%3)+3)%3)*16, 0, int(((ex%3)+3)%3)*16+16, 16)))
+			sprite.Rune = ' '
+			sprite.Fg = gui.ColorBlack
+			sprite.Bg = gui.ColorBlack
+		} else {
+			sprite.Images = append(sprite.Images, v.terrainSprites.SubImage(image.Rect(int((((ex+ey+ez)%3)+3)%3)*16, 16, int((((ex+ey+ez)%3)+3)%3)*16+16, 32)))
+			sprite.Rune = '█'
+			sprite.Fg = gui.ColorYellow
+			sprite.Bg = gui.ColorYellow
+		}
 		if w2 == x && h2 == y {
 			sprite.Images = append(sprite.Images, v.playerSprite)
 			sprite.Rune = '⁈'
 			sprite.Fg = gui.ColorRed
 			sprite.Bg = gui.ColorBlack
-		} else if h-1 == y {
-			// TODO: text
-			sprite.Rune = ' '
-			sprite.Fg = gui.ColorBlack
-			sprite.Bg = gui.ColorBlack
-		} else if minedLocations.Has(ex, ey, ez) {
-			sprite.Rune = ' '
-			sprite.Fg = gui.ColorBlack
-			sprite.Bg = gui.ColorBlack
-		} else {
-			sprite.Rune = '█'
-			sprite.Fg = gui.ColorYellow
-			sprite.Bg = gui.ColorYellow
 		}
-
+		if h-1 == y && m.Len() != 0 && m.At(m.Len()-1).Time == v.h.Tell() {
+			msg := []rune(m.At(m.Len() - 1).Text)
+			if x != 0 && x <= len(msg) {
+				if msg[x-1] >= 'a' && msg[x-1] <= 'z' {
+					sprite.Images = append(sprite.Images, v.fontSprites.SubImage(image.Rect(int(msg[x-1]-'a'+1)*16, 0, int(msg[x-1]-'a'+2)*16, 16)))
+				} else {
+					sprite.Images = append(sprite.Images, v.fontSprites)
+				}
+				sprite.Rune = msg[x-1]
+			} else {
+				sprite.Rune = ' '
+				sprite.Images = append(sprite.Images, v.fontSprites)
+			}
+			sprite.Fg = gui.ColorBrightRed
+			sprite.Bg = gui.ColorBlack
+		}
 		return false
 	})
 
@@ -249,4 +289,73 @@ func (v *Handler) SpriteAt(x, y, w, h int) (sprite *gui.Sprite) {
 
 func (v *Handler) SpriteSize() (w, h int) {
 	return 16, 16
+}
+
+func (v *Handler) Mouse(x, y, w, h int) {
+	v.moveCharacter(int64(x-w/2), int64(y-h/2))
+}
+
+func (v *Handler) Rune(r rune) (handled bool) {
+	return false
+}
+
+func (v *Handler) Key(k gui.Key) (handled bool) {
+	switch k {
+	case gui.Up:
+		v.moveCharacter(0, -1)
+		return true
+	case gui.Down:
+		v.moveCharacter(0, 1)
+		return true
+	case gui.Left:
+		v.moveCharacter(-1, 0)
+		return true
+	case gui.Right:
+		v.moveCharacter(1, 0)
+		return true
+	}
+
+	return false
+}
+
+func (v *Handler) moveCharacter(dx, dy int64) {
+	v.s.Atomic(func(s *rpg.State) bool {
+		player := s.Get(s.ByComponent(PlayerType)[0])
+
+		center := player.Component(rpg.LocationType).(*rpg.Location)
+
+		minedLocations := s.Get(s.ByComponent(MinedLocationsType)[0]).Component(MinedLocationsType).(*MinedLocations)
+
+		x, y, z := center.Get()
+		x += dx
+		y += dy
+		if !minedLocations.Has(x, y, z) {
+			container := player.Component(rpg.ContainerType).(*rpg.Container)
+			var msg *rpg.Message
+			for _, item := range container.Contents() {
+				if p, ok := item.Component(PickaxeType).(*Pickaxe); ok {
+					_, o, err := p.Use(x, y, z)
+					if err == nil {
+						container.Add(o)
+						break
+					}
+					msg = &rpg.Message{
+						Kind:   "error",
+						Source: item.ID(),
+						Time:   v.h.Tell() + 1,
+						Text:   err.Error(),
+					}
+				}
+			}
+			if msg != nil {
+				player.Component(rpg.MessagesType).(*rpg.Messages).Append(*msg)
+			}
+		} else {
+			if center.Dist(x, y, z) == 1*1 {
+				center.Set(x, y, z)
+			}
+		}
+		return true
+	})
+	v.h.Append(v.s)
 }

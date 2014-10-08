@@ -26,5 +26,8 @@ func Exit() {
 type Interface interface {
 	SpriteSize() (w, h int)
 	SpriteAt(x, y, w, h int) *Sprite
+	Mouse(x, y, w, h int)
+	Rune(r rune) (handled bool)
+	Key(k Key) (handled bool)
 	Closing() (allow bool)
 }
