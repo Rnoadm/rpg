@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"errors"
+	"flag"
 	"github.com/Rnoadm/rpg"
 	"github.com/Rnoadm/rpg/gui"
 	"github.com/Rnoadm/rpg/history"
@@ -12,6 +13,12 @@ import (
 	"io"
 	"os"
 	"sort"
+	"time"
+)
+
+var (
+	flagFilename = flag.String("f", "miningsim.sav", "filename for save file")
+	flagReplay   = flag.Duration("replay", 0, "play back the game up to this point with this delay between frames")
 )
 
 func init() {
@@ -169,7 +176,9 @@ func (p *Pickaxe) GobDecode(data []byte) (err error) {
 }
 
 func main() {
-	f, err := os.OpenFile("miningsim.sav", os.O_CREATE|os.O_RDWR, 0644)
+	flag.Parse()
+
+	f, err := os.OpenFile(*flagFilename, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -199,6 +208,27 @@ func main() {
 		panic(err)
 	}
 
+	nextFrame := make(chan struct{}, 1)
+	replayDone := make(chan struct{})
+	if *flagReplay > 0 {
+		h.Reset()
+		go func(d time.Duration) {
+			for {
+				select {
+				case nextFrame <- struct{}{}:
+				default:
+				}
+				gui.Redraw()
+				select {
+				case <-replayDone:
+					return
+				default:
+				}
+				time.Sleep(d)
+			}
+		}(*flagReplay)
+	}
+
 	playerSprite, err := png.Decode(bytes.NewReader(MiningsimPlayerPng))
 	if err != nil {
 		panic(err)
@@ -214,7 +244,15 @@ func main() {
 		panic(err)
 	}
 
-	gui.Main("Mining Simulator 2014", &Handler{h: h, s: s, playerSprite: playerSprite, fontSprites: fontSprites.(*image.Paletted), terrainSprites: terrainSprites.(*image.Paletted)})
+	gui.Main("Mining Simulator 2014", &Handler{
+		h:              h,
+		s:              s,
+		playerSprite:   playerSprite,
+		fontSprites:    fontSprites.(*image.Paletted),
+		terrainSprites: terrainSprites.(*image.Paletted),
+		nextFrame:      nextFrame,
+		replayDone:     replayDone,
+	})
 }
 
 type Handler struct {
@@ -223,6 +261,8 @@ type Handler struct {
 	playerSprite   image.Image
 	fontSprites    *image.Paletted
 	terrainSprites *image.Paletted
+	nextFrame      <-chan struct{}
+	replayDone     chan<- struct{}
 }
 
 func (v *Handler) Closing() bool {
@@ -230,6 +270,22 @@ func (v *Handler) Closing() bool {
 }
 
 func (v *Handler) SpriteAt(x, y, w, h int) (sprite *gui.Sprite) {
+	if *flagReplay > 0 {
+		select {
+		case <-v.nextFrame:
+			s, err := v.h.Seek(1, history.SeekCur)
+			if err == io.EOF {
+				*flagReplay = 0
+				close(v.replayDone)
+			} else if err != nil {
+				panic(err)
+			} else {
+				v.s = s
+			}
+		default:
+		}
+	}
+
 	w2, h2 := w/2, h/2
 
 	v.s.Atomic(func(s *rpg.State) bool {
@@ -319,6 +375,10 @@ func (v *Handler) Key(k gui.Key) (handled bool) {
 }
 
 func (v *Handler) moveCharacter(dx, dy int64) {
+	if *flagReplay > 0 {
+		return
+	}
+
 	v.s.Atomic(func(s *rpg.State) bool {
 		player := s.Get(s.ByComponent(PlayerType)[0])
 

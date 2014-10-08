@@ -23,6 +23,15 @@ func Exit() {
 	close(exitch)
 }
 
+var redrawch = make(chan struct{}, 1)
+
+func Redraw() {
+	select {
+	case redrawch <- struct{}{}:
+	default:
+	}
+}
+
 type Interface interface {
 	SpriteSize() (w, h int)
 	SpriteAt(x, y, w, h int) *Sprite

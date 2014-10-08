@@ -38,8 +38,16 @@ func goGraphics(title string, handler Interface) {
 		window.Show()
 	})
 
-	<-exitch
-	ui.Stop()
+	for {
+		select {
+		case <-redrawch:
+			ui.Do(area.RepaintAll)
+
+		case <-exitch:
+			ui.Stop()
+			return
+		}
+	}
 }
 
 type graphicsHandler struct {

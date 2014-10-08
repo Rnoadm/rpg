@@ -11,47 +11,54 @@ func mainText(handler Interface) error {
 	termbox.SetInputMode(termbox.InputEsc | termbox.InputMouse)
 	termbox.HideCursor()
 
+	events := make(chan termbox.Event)
+	go func() {
+		for {
+			events <- termbox.PollEvent()
+		}
+	}()
+
 	for {
 		paintText(handler)
 
-		event := termbox.PollEvent()
-		switch event.Type {
-		case termbox.EventError:
-			return event.Err
+		select {
+		case event := <-events:
+			switch event.Type {
+			case termbox.EventError:
+				return event.Err
 
-		case termbox.EventResize:
+			case termbox.EventResize:
+				// we repaint on the next iteration
+
+			case termbox.EventMouse:
+				w, h := termbox.Size()
+				handler.Mouse(event.MouseX, event.MouseY, w, h)
+
+			case termbox.EventKey:
+				if event.Ch == 0 && event.Key == termbox.KeyEnter {
+					event.Ch = '\n'
+				}
+				if event.Ch == 0 {
+					if k, ok := textKeys[event.Key]; ok {
+						if handler.Key(k) {
+							continue
+						}
+					}
+
+					if event.Key == termbox.KeyEsc {
+						if handler.Closing() {
+							return nil
+						}
+					}
+				} else {
+					handler.Rune(event.Ch)
+				}
+			}
+		case <-redrawch:
 			// we repaint on the next iteration
 
-		case termbox.EventMouse:
-			w, h := termbox.Size()
-			handler.Mouse(event.MouseX, event.MouseY, w, h)
-
-		case termbox.EventKey:
-			if event.Ch == 0 && event.Key == termbox.KeyEnter {
-				event.Ch = '\n'
-			}
-			if event.Ch == 0 {
-				if k, ok := textKeys[event.Key]; ok {
-					if handler.Key(k) {
-						continue
-					}
-				}
-
-				if event.Key == termbox.KeyEsc {
-					if handler.Closing() {
-						return nil
-					}
-				}
-			} else {
-				handler.Rune(event.Ch)
-			}
-		}
-
-		select {
 		case <-exitch:
 			return nil
-
-		default:
 		}
 	}
 }
