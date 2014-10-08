@@ -86,6 +86,8 @@ func (s *State) GobEncode() (data []byte, err error) {
 		return nil, ErrStateParent
 	}
 
+	s.clearDeleted()
+
 	data = writeUvarint(data, stateVersion)
 	data = writeUvarint(data, atomic.LoadUint64(s.nextObjectID))
 	data = writeUvarint(data, uint64(len(s.objects)))
@@ -131,6 +133,7 @@ func (s *State) GobDecode(data []byte) (err error) {
 	if s.nextObjectID == nil {
 		s.objects = make(map[ObjectIndex]*Object)
 		s.by_component = make(map[reflect.Type][]ObjectIndex)
+		s.deleted = make(map[ObjectIndex]uint64)
 		s.nextObjectID = new(uint64)
 		s.nextObjectVersion = new(uint64)
 	}

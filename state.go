@@ -16,6 +16,9 @@ type State struct {
 	mtx          sync.Mutex
 
 	nextObjectID, nextObjectVersion *uint64
+
+	deleted        map[ObjectIndex]uint64
+	deletedVersion uint64
 }
 
 // NewState initializes an empty State.
@@ -28,12 +31,20 @@ func newState(parent *State) *State {
 		parent:       parent,
 		objects:      make(map[ObjectIndex]*Object),
 		by_component: make(map[reflect.Type][]ObjectIndex),
+		deleted:      make(map[ObjectIndex]uint64),
 	}
 	if parent == nil {
 		var a [2]uint64
 		s.nextObjectID, s.nextObjectVersion = &a[0], &a[1]
 	} else {
 		s.nextObjectID, s.nextObjectVersion = parent.nextObjectID, parent.nextObjectVersion
+		parent.mtx.Lock()
+		defer parent.mtx.Unlock()
+
+		s.deletedVersion = parent.deletedVersion
+		for id, v := range parent.deleted {
+			s.deleted[id] = v
+		}
 	}
 	return s
 }
@@ -42,40 +53,87 @@ func newState(parent *State) *State {
 // modified. f may be called multiple times if other calls to Atomic are being processed
 // at the same time. Returning false from f causes Atomic to return false without
 // applying the changes.
+//
+// This does not currently work recursively, but it may in the future.
 func (s *State) Atomic(f func(*State) bool) bool {
-retry:
+	// TODO: make this work recursively
+
 	for {
 		child := newState(s)
 		if !f(child) {
 			return false
 		}
 
-		child.mtx.Lock()
-		defer child.mtx.Unlock()
+		if func() bool {
+			child.mtx.Lock()
+			defer child.mtx.Unlock()
 
-		s.mtx.Lock()
-		defer s.mtx.Unlock()
+			s.mtx.Lock()
+			defer s.mtx.Unlock()
 
-		for id, o := range child.objects {
-			if !o.modified {
-				continue
+			if child.deletedVersion != s.deletedVersion {
+				for id, v1 := range s.deleted {
+					if v2, ok := child.deleted[id]; !ok || v1 != v2 {
+						return false
+					}
+				}
 			}
-			if p, ok := s.objects[id]; ok && p.version != o.version {
-				continue retry
-			}
-		}
 
-		for id, o := range child.objects {
-			if !o.modified {
-				continue
+			var newlyDeleted []ObjectIndex
+
+			for id, o := range child.objects {
+				if o == nil {
+					if p, ok := s.objects[id]; ok && p != nil {
+						if child.deleted[id] != p.version {
+							return false
+						}
+						newlyDeleted = append(newlyDeleted, id)
+					}
+					continue
+				}
+				if !o.modified {
+					continue
+				}
+				if p, ok := s.objects[id]; ok && p.version != o.version {
+					return false
+				}
 			}
-			o.version = atomic.AddUint64(s.nextObjectVersion, 1)
-			s.objects[id] = o
+
+			for id, o := range child.objects {
+				if o == nil {
+					s.objects[id] = nil
+					continue
+				}
+				if !o.modified {
+					continue
+				}
+				o.version = atomic.AddUint64(s.nextObjectVersion, 1)
+				s.objects[id] = o
+			}
+			for t, m := range child.by_component {
+				s.by_component[t] = append(s.by_component[t], m...)
+			}
+			if len(newlyDeleted) != 0 {
+				for t, m := range s.by_component {
+					ids := sortedObjectIndices(m)
+					sort.Sort(ids)
+					removed := false
+					for _, id := range newlyDeleted {
+						if ids.remove(id) {
+							removed = true
+						}
+					}
+					if removed {
+						s.by_component[t] = []ObjectIndex(ids)
+					}
+				}
+			}
+			s.deleted = child.deleted
+			s.deletedVersion = child.deletedVersion
+			return true
+		}() {
+			return true
 		}
-		for t, m := range child.by_component {
-			s.by_component[t] = append(s.by_component[t], m...)
-		}
-		return true
 	}
 }
 
@@ -137,36 +195,58 @@ func (s *State) Get(id ObjectIndex) *Object {
 	return o
 }
 
-// IDs returns the set of ObjectIndex accessible from s in ascending order.
-func (s *State) IDs() []ObjectIndex {
-	ids := s.appendIDs(nil)
-	sort.Sort(sortedObjectIndices(ids))
-	return ids
+// Delete removes an object from the State. Future calls to Get will return nil. If the
+// object is referenced anywhere, Bad Things™ will happen.
+func (s *State) Delete(id ObjectIndex) {
+	o := s.Get(id)
+	if o == nil {
+		return
+	}
+
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.objects[id] = nil
+	s.deleted[id] = o.version
+	s.deletedVersion = atomic.AddUint64(s.nextObjectVersion, 1)
 }
 
-func (s *State) appendIDs(ids []ObjectIndex) []ObjectIndex {
+// IDs returns the set of ObjectIndex accessible from s in ascending order.
+func (s *State) IDs() []ObjectIndex {
+	ids, remove := s.appendIDs(nil, nil)
+	sort.Sort(ids)
+	for _, r := range remove {
+		ids.remove(r)
+	}
+	return []ObjectIndex(ids)
+}
+
+func (s *State) appendIDs(ids sortedObjectIndices, remove []ObjectIndex) (sortedObjectIndices, []ObjectIndex) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	if s.parent != nil {
-		ids = s.parent.appendIDs(ids)
+		ids, remove = s.parent.appendIDs(ids, remove)
 	}
 
-	for id := range s.objects {
+	for id, o := range s.objects {
 		if s.parent == nil || !s.parent.hasID(id) {
 			ids = append(ids, id)
 		}
+		if o == nil {
+			remove = append(remove, id)
+		}
 	}
 
-	return ids
+	return ids, remove
 }
 
 func (s *State) hasID(id ObjectIndex) bool {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	if _, ok := s.objects[id]; ok {
-		return true
+	if o, ok := s.objects[id]; ok {
+		return o != nil
 	}
 	if s.parent == nil {
 		return false
@@ -191,4 +271,11 @@ func (s *State) byComponent(t reflect.Type) []ObjectIndex {
 	}
 
 	return append(ids, s.by_component[t]...)
+}
+
+func (s *State) clearDeleted() {
+	for id := range s.deleted {
+		delete(s.objects, id)
+	}
+	s.deleted = make(map[ObjectIndex]uint64)
 }
