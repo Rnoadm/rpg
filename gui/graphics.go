@@ -61,9 +61,12 @@ func (g *graphicsHandler) Paint(cliprect image.Rectangle) *image.RGBA {
 	w, h := g.handler.SpriteSize()
 	r := image.Rect(0, 0, w, h)
 
+	g.w = (cliprect.Max.X + w - 1) / w
+	g.h = (cliprect.Max.Y + h - 1) / h
+
 	for x := cliprect.Min.X / w; x <= cliprect.Max.X/w; x++ {
 		for y := cliprect.Min.Y / h; y <= cliprect.Max.Y/h; y++ {
-			s := g.handler.SpriteAt(x, y, (g.w+w-1)/w, (g.h+h-1)/h)
+			s := g.handler.SpriteAt(x, y, (cliprect.Max.X+w-1)/w, (cliprect.Max.Y+h-1)/h)
 			for _, i := range s.Images {
 				draw.Draw(img, r.Add(image.Pt(x*w, y*h)), i, i.Bounds().Min, draw.Over)
 			}
