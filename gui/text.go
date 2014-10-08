@@ -48,6 +48,13 @@ func mainText(handler Interface) error {
 	}
 }
 
-func paintText(h Interface) {
-
+func paintText(handler Interface) {
+	w, h := termbox.Size()
+	for x := 0; x < w; x++ {
+		for y := 0; y < h; y++ {
+			s := handler.SpriteAt(x, y, w, h)
+			termbox.SetCell(x, y, s.Rune, termbox.Attribute(s.Fg), termbox.Attribute(s.Bg))
+		}
+	}
+	termbox.Flush()
 }

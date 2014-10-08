@@ -25,6 +25,6 @@ func Exit() {
 
 type Interface interface {
 	SpriteSize() (w, h int)
-	SpriteAt(x, y int) *Sprite
+	SpriteAt(x, y, w, h int) *Sprite
 	Closing() (allow bool)
 }
