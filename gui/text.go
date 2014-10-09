@@ -65,6 +65,7 @@ func mainText(handler Interface) error {
 
 func paintText(handler Interface) {
 	w, h := termbox.Size()
+	handler.PreRender(w, h)
 	for x := 0; x < w; x++ {
 		for y := 0; y < h; y++ {
 			s := handler.SpriteAt(x, y, w, h)

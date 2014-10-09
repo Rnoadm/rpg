@@ -281,23 +281,22 @@ func (v *Handler) Closing() bool {
 	return true
 }
 
-func (v *Handler) SpriteAt(x, y, w, h int) (sprite *gui.Sprite) {
+func (v *Handler) PreRender(w, h int) {
 	if *flagReplay > 0 {
-		select {
-		case <-v.nextFrame:
-			s, err := v.h.Seek(1, history.SeekCur)
-			if err == io.EOF {
-				*flagReplay = 0
-				close(v.replayDone)
-			} else if err != nil {
-				panic(err)
-			} else {
-				v.s = s
-			}
-		default:
+		s, err := v.h.Seek(1, history.SeekCur)
+		if err == io.EOF {
+			*flagReplay = 0
+			close(v.replayDone)
+		} else if err != nil {
+			panic(err)
+		} else {
+			v.s = s
 		}
 	}
 
+}
+
+func (v *Handler) SpriteAt(x, y, w, h int) (sprite *gui.Sprite) {
 	w2, h2 := w/2, h/2
 
 	v.s.Atomic(func(s *rpg.State) bool {
