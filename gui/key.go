@@ -1,8 +1,8 @@
 package gui
 
 import (
-	"github.com/andlabs/ui"
 	"github.com/nsf/termbox-go"
+	"github.com/skelterjohn/go.wde"
 )
 
 type Key uint
@@ -33,8 +33,6 @@ const (
 	Delete
 	Home
 	End
-	PageUp
-	PageDown
 )
 
 var textKeys = map[termbox.Key]Key{
@@ -62,35 +60,31 @@ var textKeys = map[termbox.Key]Key{
 	termbox.KeyDelete:    Delete,
 	termbox.KeyHome:      Home,
 	termbox.KeyEnd:       End,
-	termbox.KeyPgup:      PageUp,
-	termbox.KeyPgdn:      PageDown,
 }
 
-var graphicsKeys = map[ui.ExtKey]Key{
-	ui.F1:  F1,
-	ui.F2:  F2,
-	ui.F3:  F3,
-	ui.F4:  F4,
-	ui.F5:  F5,
-	ui.F6:  F6,
-	ui.F7:  F7,
-	ui.F8:  F8,
-	ui.F9:  F9,
-	ui.F10: F10,
-	ui.F11: F11,
-	ui.F12: F12,
+var graphicsKeys = map[string]Key{
+	wde.KeyF1:  F1,
+	wde.KeyF2:  F2,
+	wde.KeyF3:  F3,
+	wde.KeyF4:  F4,
+	wde.KeyF5:  F5,
+	wde.KeyF6:  F6,
+	wde.KeyF7:  F7,
+	wde.KeyF8:  F8,
+	wde.KeyF9:  F9,
+	wde.KeyF10: F10,
+	wde.KeyF11: F11,
+	wde.KeyF12: F12,
 
-	ui.Up:    Up,
-	ui.Down:  Down,
-	ui.Left:  Left,
-	ui.Right: Right,
+	wde.KeyUpArrow:    Up,
+	wde.KeyDownArrow:  Down,
+	wde.KeyLeftArrow:  Left,
+	wde.KeyRightArrow: Right,
 
-	ui.Escape: Escape,
-	// Backspace is a special case handled in code.
-	ui.Insert:   Insert,
-	ui.Delete:   Delete,
-	ui.Home:     Home,
-	ui.End:      End,
-	ui.PageUp:   PageUp,
-	ui.PageDown: PageDown,
+	wde.KeyEscape:    Escape,
+	wde.KeyBackspace: Backspace,
+	wde.KeyInsert:    Insert,
+	wde.KeyDelete:    Delete,
+	wde.KeyHome:      Home,
+	wde.KeyEnd:       End,
 }

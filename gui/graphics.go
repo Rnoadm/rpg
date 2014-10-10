@@ -1,74 +1,105 @@
 package gui
 
 import (
-	"github.com/andlabs/ui"
+	"github.com/skelterjohn/go.wde"
+	_ "github.com/skelterjohn/go.wde/init"
 	"image"
 	"image/draw"
 )
 
-var area ui.Area
-var window ui.Window
-
 func mainGraphics(title string, handler Interface) error {
-	go goGraphics(title, handler)
+	errch := make(chan error, 2)
+	go goGraphics(title, handler, errch)
 
-	return ui.Go()
+	wde.Run()
+
+	return <-errch
 }
 
-func goGraphics(title string, handler Interface) {
-	ui.Do(func() {
-		w, h := handler.SpriteSize()
-		w *= 80
-		h *= 25
-		area = ui.NewArea(w, h, &graphicsHandler{handler, w, h})
-		window = ui.NewWindow(title, w, h, area)
+func goGraphics(title string, handler Interface, errch chan<- error) {
+	defer func() {
+		errch <- nil
+	}()
+	defer wde.Stop()
 
-		window.OnClosing(func() bool {
-			if handler.Closing() {
-				select {
-				case <-exitch:
-				default:
-					close(exitch)
-				}
-				return true
-			}
-			return false
-		})
+	w, h := handler.SpriteSize()
+	w *= 80
+	h *= 25
+	window, err := wde.NewWindow(w, h)
+	if err != nil {
+		errch <- err
+		return
+	}
+	window.SetTitle(title)
+	window.Show()
 
-		window.Show()
-	})
+	eventch := window.EventChan()
 
 	for {
 		select {
+		case event := <-eventch:
+			switch e := event.(type) {
+			case wde.CloseEvent:
+				if handler.Closing() {
+					return
+				} else {
+					window.Show()
+				}
+
+			case wde.ResizeEvent:
+				Redraw()
+
+			case wde.MouseDraggedEvent, wde.MouseEnteredEvent, wde.MouseExitedEvent, wde.MouseMovedEvent, wde.MouseUpEvent:
+				// ignore
+
+			case wde.MouseDownEvent:
+				if e.Which&wde.LeftButton == 0 {
+					continue
+				}
+				x, y := e.Where.X, e.Where.Y
+				w, h := handler.SpriteSize()
+				ww, wh := window.Size()
+				handler.Mouse(x/w, y/h, ww/w, wh/h)
+				Redraw()
+
+			case wde.KeyDownEvent, wde.KeyUpEvent:
+				// ignore
+
+			case wde.KeyTypedEvent:
+				if k, ok := graphicsKeys[e.Key]; ok {
+					_ = handler.Key(k)
+				} else {
+					for _, r := range e.Glyph {
+						_ = handler.Rune(r)
+					}
+				}
+				Redraw()
+			}
+
 		case <-redrawch:
-			ui.Do(area.RepaintAll)
+			s := window.Screen()
+			r := s.Bounds()
+			s.CopyRGBA(graphicsPaint(handler, r), r)
+			window.FlushImage(r)
 
 		case <-exitch:
-			ui.Stop()
 			return
 		}
 	}
 }
 
-type graphicsHandler struct {
-	handler Interface
-	w, h    int
-}
-
-func (g *graphicsHandler) Paint(cliprect image.Rectangle) *image.RGBA {
+func graphicsPaint(handler Interface, cliprect image.Rectangle) *image.RGBA {
 	img := image.NewRGBA(cliprect)
 
-	w, h := g.handler.SpriteSize()
+	w, h := handler.SpriteSize()
 	r := image.Rect(0, 0, w, h)
+	ww, wh := cliprect.Max.X/w, cliprect.Max.Y/h
 
-	g.w = (cliprect.Max.X + w - 1) / w
-	g.h = (cliprect.Max.Y + h - 1) / h
+	handler.PreRender(ww, wh)
 
-	g.handler.PreRender(g.w, g.h)
-
-	for x := cliprect.Min.X / w; x < (cliprect.Max.X+w-1)/w; x++ {
-		for y := cliprect.Min.Y / h; y < (cliprect.Max.Y+h-1)/h; y++ {
-			s := g.handler.SpriteAt(x, y, g.w, g.h)
+	for x := cliprect.Min.X / w; x < ww; x++ {
+		for y := cliprect.Min.Y / h; y < wh; y++ {
+			s := handler.SpriteAt(x, y, ww, wh)
 			for _, i := range s.Images {
 				draw.Draw(img, r.Add(image.Pt(x*w, y*h)), i, i.Bounds().Min, draw.Over)
 			}
@@ -76,102 +107,4 @@ func (g *graphicsHandler) Paint(cliprect image.Rectangle) *image.RGBA {
 	}
 
 	return img
-}
-
-func (g *graphicsHandler) Mouse(e ui.MouseEvent) {
-	if e.Down != 1 {
-		return
-	}
-
-	defer area.RepaintAll()
-
-	x, y := e.Pos.X, e.Pos.Y
-	w, h := g.handler.SpriteSize()
-	x /= w
-	y /= h
-
-	g.handler.Mouse(x, y, g.w, g.h)
-}
-
-func (g *graphicsHandler) Key(e ui.KeyEvent) (handled bool) {
-	if e.Up {
-		return false
-	}
-	if e.Modifier != 0 {
-		return false
-	}
-	if e.Modifiers&^ui.Shift != 0 {
-		return false
-	}
-
-	defer area.RepaintAll()
-
-	if e.Key == '\b' {
-		return g.handler.Key(Backspace)
-	}
-	if e.Key == 0 {
-		if k, ok := graphicsKeys[e.ExtKey]; ok {
-			return g.handler.Key(k)
-		}
-	}
-
-	if e.Key != 0 && e.Modifiers&ui.Shift == ui.Shift {
-		if k, ok := graphicsShift[e.Key]; ok {
-			return g.handler.Rune(k)
-		}
-	}
-	if k := e.EffectiveKey(); k != 0 {
-		return g.handler.Rune(rune(k))
-	}
-	return false
-}
-
-var graphicsShift = map[byte]rune{
-	'`':  '~',
-	'1':  '!',
-	'2':  '@',
-	'3':  '#',
-	'4':  '$',
-	'5':  '%',
-	'6':  '^',
-	'7':  '&',
-	'8':  '*',
-	'9':  '(',
-	'0':  ')',
-	'-':  '_',
-	'=':  '+',
-	'q':  'Q',
-	'w':  'W',
-	'e':  'E',
-	'r':  'R',
-	't':  'T',
-	'y':  'Y',
-	'u':  'U',
-	'i':  'I',
-	'o':  'O',
-	'p':  'P',
-	'[':  '{',
-	']':  '}',
-	'\\': '|',
-	'a':  'A',
-	's':  'S',
-	'd':  'D',
-	'f':  'F',
-	'g':  'G',
-	'h':  'H',
-	'j':  'J',
-	'k':  'K',
-	'l':  'L',
-	';':  ':',
-	'\'': '"',
-	'z':  'Z',
-	'x':  'X',
-	'c':  'C',
-	'v':  'V',
-	'b':  'B',
-	'n':  'N',
-	'm':  'M',
-	',':  '<',
-	'.':  '>',
-	'/':  '?',
 }
